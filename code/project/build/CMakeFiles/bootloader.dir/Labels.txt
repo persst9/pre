@@ -1,0 +1,13 @@
+# Target labels
+ bootloader
+# Source files and their labels
+F:/esp32/bishe/project/build/CMakeFiles/bootloader
+F:/esp32/bishe/project/build/CMakeFiles/bootloader.rule
+F:/esp32/bishe/project/build/CMakeFiles/bootloader-complete.rule
+F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule
