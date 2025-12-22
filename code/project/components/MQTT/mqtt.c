@@ -6,13 +6,14 @@
 #include "nvs_flash.h"
 #include "mqtt_client.h"
 #include "wifi_sta.h"
-#include "cJSON.h"
+//#include "cJSON.h"
+#include "lora.h"
 static const char* TAG = "MQTT";
 
 #define MQTT_ADDRESS    "mqtt://mqtts.heclouds.com:1883"     //MQTT连接地址
-#define MQTT_PORT       1883                       ````````` //MQTT连接端口号
-#define MQTT_CLIENT_ID  "ESP32_S3"              `````````````//Client ID
-#define MQTT_USERNAME   "7QXO3s7nn4"                     ````//MQTT用户名
+#define MQTT_PORT       1883                       //MQTT连接端口号
+#define MQTT_CLIENT_ID  "ESP32_S3"             //Client ID
+#define MQTT_USERNAME   "7QXO3s7nn4"                   //MQTT用户名
 #define MQTT_PASSWORD    "version=2018-10-31&res=products%2F7QXO3s7nn4%2Fdevices%2FESP32_S3&et=2081766636&method=md5&sign=B%2Bgg59lJ9tE3A8piA80ElA%3D%3D"
 
 #define MQTT_PUBLIC_TOPIC      "$sys/7QXO3s7nn4/ESP32_S3/dp/post/json"       //测试用的,推送消息主题
@@ -21,7 +22,18 @@ static const char* TAG = "MQTT";
 //定义一个事件组，用于通知main函数WIFI连接成功
 #define WIFI_CONNECT_BIT     BIT0
 static EventGroupHandle_t   s_wifi_ev = NULL;
+typedef struct node_t
+{
+    uint8_t node_id;
+    int16_t temp;
+    int16_t humi;
+    int16_t light;
+    int16_t soil;
+}node_data_t;
 
+uint8_t data_buf[30] = {0};
+char res_data[30] = {0};
+char res_topic[30] = {0};
 //MQTT客户端操作句柄
 static esp_mqtt_client_handle_t     s_mqtt_client = NULL;
 
@@ -64,6 +76,8 @@ static void aliot_mqtt_event_handler(void* event_handler_arg,
         case MQTT_EVENT_DATA:
             printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);       //收到Pub消息直接打印出来
             printf("DATA=%.*s\r\n", event->data_len, event->data);
+            sprintf(res_topic, "%.*s", event->topic_len, event->topic);
+            sprintf(res_data, "%.*s", event->data_len, event->data);
             break;
         case MQTT_EVENT_ERROR:
             ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
@@ -111,6 +125,27 @@ void wifi_event_handler(WIFI_EV_e ev)
     }
 }
 
+void parse_lora_data(node_data_t node_data)
+{
+    lora_receive(data_buf, sizeof(data_buf));
+    node_data.node_id = data_buf[1];
+    node_data.temp = data_buf[2];
+    node_data.humi = data_buf[3];
+    node_data.light = data_buf[4];
+    node_data.soil = data_buf[5];
+
+    char mqtt_playload[128] = {0};
+    snprintf(mqtt_playload,sizeof(mqtt_playload), 
+    "{\"node_id\":%d,\"temp\":%1f,\"humi\":%1f,\"light\":%1f,\"soil\":%1f}", 
+    node_data.node_id, node_data.temp/10.0, node_data.humi/10.0, node_data.light/10.0, node_data.soil/10.0);
+    esp_mqtt_client_publish(s_mqtt_client,MQTT_PUBLIC_TOPIC,mqtt_playload,strlen(mqtt_playload),0,0);
+}
+
+
+void mqtt_subscribe(void)
+{
+    
+}
 
 
 void mqtt_main(void)

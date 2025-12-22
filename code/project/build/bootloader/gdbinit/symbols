@@ -17,4 +17,4 @@ set confirm off
 set confirm on
 
 # Load application symbols
-file F:/esp32/bishe/project/build/bootloader/bootloader.elf
+file E:/Git/bishe/code/project/build/bootloader/bootloader.elf

@@ -10,16 +10,29 @@
 set(src_dirs
             DHT11
             BH1750
-            IIC)
+            IIC
+            LORA
+            WIFI
+            MQTT
+            TS
+            WARE)
 
 set(include_dirs
             DHT11
             BH1750
-            IIC)
+            IIC
+            LORA
+            WIFI
+            MQTT
+            TS
+            WARE)
 
 set(requires
             driver
-            esp_adc)
+            esp_adc
+            nvs_flash
+            mqtt
+            esp_wifi)
 
 idf_component_register(SRC_DIRS ${src_dirs} INCLUDE_DIRS ${include_dirs} REQUIRES ${requires})
 

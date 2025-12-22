@@ -1,2 +1,2 @@
-source F:/esp32/bishe/project/build/bootloader/gdbinit/symbols
-source F:/esp32/bishe/project/build/bootloader/gdbinit/connect
+source E:/Git/bishe/code/project/build/bootloader/gdbinit/symbols
+source E:/Git/bishe/code/project/build/bootloader/gdbinit/connect

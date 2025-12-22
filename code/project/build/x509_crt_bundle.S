@@ -1,4 +1,4 @@
-/* * Data converted from F:/esp32/bishe/project/build/esp-idf/mbedtls/x509_crt_bundle
+/* * Data converted from E:/Git/bishe/code/project/build/esp-idf/mbedtls/x509_crt_bundle
  */
 .data
 .section .rodata.embedded

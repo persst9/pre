@@ -4,11 +4,11 @@
 #include "driver/gpio.h"
 #include "driver/i2c.h"
 #include "iic.h"
-
+#include <esp_log.h>
 #define bh1750_write_addr 0x46
 #define bh1750_read_addr  0x47
 
-float light = 0 ; //π‚’’«ø∂»
+static float light = 0 ; 
 
 void bh1750_send_cmd(uint8_t cmd_data)
 {

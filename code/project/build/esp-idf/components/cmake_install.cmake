@@ -1,4 +1,4 @@
-# Install script for directory: F:/esp32/bishe/project/components
+# Install script for directory: E:/Git/bishe/code/project/components
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

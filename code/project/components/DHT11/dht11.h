@@ -6,7 +6,7 @@
  * @param dht11_pin GPIO引脚
  * @return 无
 */
-void DHT11_Init(uint8_t dht11_pin);
+void DHT11_Init(void);
 
 /** 获取DHT11数据
  * @param temp_x10 温度值X10

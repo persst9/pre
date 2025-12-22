@@ -10,18 +10,18 @@ if(NOT EXISTS "E:/Esp32/v5.2.5/esp-idf/components/bootloader/subproject")
   file(MAKE_DIRECTORY "E:/Esp32/v5.2.5/esp-idf/components/bootloader/subproject")
 endif()
 file(MAKE_DIRECTORY
-  "F:/esp32/bishe/project/build/bootloader"
-  "F:/esp32/bishe/project/build/bootloader-prefix"
-  "F:/esp32/bishe/project/build/bootloader-prefix/tmp"
-  "F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp"
-  "F:/esp32/bishe/project/build/bootloader-prefix/src"
-  "F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp"
+  "E:/Git/bishe/code/project/build/bootloader"
+  "E:/Git/bishe/code/project/build/bootloader-prefix"
+  "E:/Git/bishe/code/project/build/bootloader-prefix/tmp"
+  "E:/Git/bishe/code/project/build/bootloader-prefix/src/bootloader-stamp"
+  "E:/Git/bishe/code/project/build/bootloader-prefix/src"
+  "E:/Git/bishe/code/project/build/bootloader-prefix/src/bootloader-stamp"
 )
 
 set(configSubDirs )
 foreach(subDir IN LISTS configSubDirs)
-    file(MAKE_DIRECTORY "F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp/${subDir}")
+    file(MAKE_DIRECTORY "E:/Git/bishe/code/project/build/bootloader-prefix/src/bootloader-stamp/${subDir}")
 endforeach()
 if(cfgdir)
-  file(MAKE_DIRECTORY "F:/esp32/bishe/project/build/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
+  file(MAKE_DIRECTORY "E:/Git/bishe/code/project/build/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
 endif()

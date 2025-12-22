@@ -13,8 +13,8 @@ end
 
 # Load bootloader symbols
 set confirm off
-    add-symbol-file F:/esp32/bishe/project/build/bootloader/bootloader.elf
+    add-symbol-file E:/Git/bishe/code/project/build/bootloader/bootloader.elf
 set confirm on
 
 # Load application symbols
-file F:/esp32/bishe/project/build/project.elf
+file E:/Git/bishe/code/project/build/project.elf

@@ -9,9 +9,9 @@
 
 #define TAG		"DHT11"
 #define DHT11_GPIO	15		// DHT11引脚定义
-uint8_t DHT11_PIN = -1;
+uint8_t DHT11_PIN = DHT11_GPIO;
 // 温度 湿度变量
-int temp = 0,hum = 0;
+static int temp = 0,hum = 0;
 //rmt接收通道句柄
 static rmt_channel_handle_t rx_chan_handle = NULL;
 
@@ -32,18 +32,15 @@ static bool IRAM_ATTR example_rmt_rx_done_callback(rmt_channel_handle_t channel,
 }
 
 /** DHT11初始化
- * @param dht11_pin GPIO引脚
  * @return 无
 */
-void DHT11_Init(uint8_t dht11_pin)
+void DHT11_Init(void)
 {
-	DHT11_PIN = dht11_pin;
-    
     rmt_rx_channel_config_t rx_chan_config = {
         .clk_src = RMT_CLK_SRC_APB,   // 选择时钟源
         .resolution_hz = 1000 * 1000, 	  // 1 MHz 滴答分辨率，即 1 滴答 = 1 µs
         .mem_block_symbols = 64,          // 内存块大小，即 64 * 4 = 256 字节
-        .gpio_num = dht11_pin,            // GPIO 编号
+        .gpio_num = DHT11_GPIO,            // GPIO 编号
         .flags.invert_in = false,         // 不反转输入信号
         .flags.with_dma = false,          // 不需要 DMA 后端(ESP32S3才有)
     };
@@ -167,7 +164,7 @@ int DHT11_StartGet(int *temp_x10, int *humidity)
 
 void dht11_main(void)
 {
-    DHT11_Init(DHT11_GPIO);
+    DHT11_Init();
 	while (1){
 		if (DHT11_StartGet(&temp, &hum)){
 			ESP_LOGI(TAG, "temp->%i.%i C     hum->%i%%", temp / 10, temp % 10, hum);

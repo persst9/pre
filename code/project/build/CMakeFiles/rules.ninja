@@ -1476,7 +1476,7 @@ rule C_STATIC_LIBRARY_LINKER____idf_components_
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
-  command = E:\Esp32\.espressif\tools\cmake\3.30.2\bin\cmake.exe --regenerate-during-build -SF:\esp32\bishe\project -BF:\esp32\bishe\project\build
+  command = E:\Esp32\.espressif\tools\cmake\3.30.2\bin\cmake.exe --regenerate-during-build -SE:\Git\bishe\code\project -BE:\Git\bishe\code\project\build
   description = Re-running CMake...
   generator = 1
 

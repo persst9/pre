@@ -1,2 +1,2 @@
-source F:/esp32/bishe/project/build/gdbinit/symbols
-source F:/esp32/bishe/project/build/gdbinit/connect
+source E:/Git/bishe/code/project/build/gdbinit/symbols
+source E:/Git/bishe/code/project/build/gdbinit/connect

@@ -9,9 +9,9 @@
 bool IRAM_ATTR adc_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data);
 
 // ========================== 对外接口声明 ==========================
+void adc_ts_init(void);
 /**
  * @brief 读取ADC采样数据（主任务循环调用）
  */
-void adc_continuous_read_data(void);
-extern uint8_t adc_data; // 采样数据
+uint16_t adc_continuous_read_data(void);
 #endif

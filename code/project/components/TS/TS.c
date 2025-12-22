@@ -17,7 +17,7 @@ static TaskHandle_t s_task_handle = NULL;  // 主任务句柄（跨文件访问需提供 sette
 static adc_continuous_handle_t s_adc_handle = NULL; // ADC 句柄
 
 uint8_t *data_value;
-uint8_t adc_data,adc_value;
+uint16_t adc_data,adc_value;
 uint16_t adc_sum = 0;
 uint8_t adc_channelnum;
 uint8_t adc_num = 0; // ADC 采样次数
@@ -74,16 +74,19 @@ static void continuous_adc_init(void)
 }
 
 // ========================== 对外接口（供主文件调用） ==========================
-void adc_continuous_read_data(void)
+
+void adc_ts_init(void)
 {
     continuous_adc_init();
-    while(1)
+}
+uint16_t adc_continuous_read_data(void)
+{
+    uint16_t ts_data = 0;
+    if(adc_value != 0)
     {
-        if(adc_value != 0)
-        {
-            ESP_LOGI(TAG, "ADC value: %u", adc_value);
-            adc_value = 0;
-        }
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        ts_data = adc_value;
+        ESP_LOGI(TAG, "ADC value: %u", adc_value);
+        adc_value = 0;
     }
+    return ts_data;
 }
