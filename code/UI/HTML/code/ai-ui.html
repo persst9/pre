@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧农业监测系统</title>
+    <!-- 引入ECharts库 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            min-height: 100vh;
+            padding-bottom: 40px;
+        }
+
+        /* 头部样式 */
+        header {
+            background: linear-gradient(135deg, #2d8659, #4ade80);
+            color: white;
+            padding: 2vw 0;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header-title {
+            font-size: clamp(1.5rem, 4vw, 2.2rem);
+            margin-bottom: 0.5vw;
+        }
+
+        .header-subtitle {
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            opacity: 0.9;
+            font-weight: normal;
+        }
+
+        /* 容器样式 */
+        .container {
+            max-width: 1200px;
+            margin: 3vw auto;
+            padding: 0 clamp(10px, 2vw, 20px);
+        }
+
+        /* 视图切换按钮 */
+        .view-switch {
+            display: flex;
+            justify-content: center;
+            gap: clamp(10px, 1.5vw, 15px);
+            margin-bottom: 2vw;
+            flex-wrap: wrap;
+        }
+
+        .view-btn {
+            padding: clamp(8px, 1.5vw, 12px) clamp(15px, 2vw, 20px);
+            border: none;
+            border-radius: 8px;
+            background-color: #2d8659;
+            color: white;
+            font-size: clamp(0.9rem, 1.8vw, 1.1rem);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .view-btn.active {
+            background-color: #1e6342;
+            box-shadow: 0 2px 8px rgba(45, 134, 89, 0.3);
+        }
+
+        .view-btn:hover {
+            background-color: #37a06d;
+        }
+
+        /* 节点选择器样式 */
+        .node-selector {
+            text-align: center;
+            margin-bottom: 2vw;
+        }
+
+        .node-selector label {
+            font-size: clamp(1rem, 2vw, 1.2rem);
+            color: #333;
+            margin-right: 1vw;
+            font-weight: 500;
+        }
+
+        .node-selector select {
+            padding: clamp(8px, 1.5vw, 12px) clamp(10px, 2vw, 15px);
+            font-size: clamp(0.9rem, 1.8vw, 1.1rem);
+            border: 2px solid #2d8659;
+            border-radius: 8px;
+            background-color: white;
+            color: #333;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .node-selector select:hover {
+            background-color: #f0f8f4;
+        }
+
+        /* 自定义节点操作区 */
+        .node-edit {
+            text-align: center;
+            margin: 2vw 0;
+            display: flex;
+            justify-content: center;
+            gap: clamp(10px, 1.5vw, 15px);
+            flex-wrap: wrap;
+        }
+
+        .node-edit input {
+            padding: clamp(8px, 1.5vw, 12px) clamp(10px, 2vw, 15px);
+            border: 2px solid #2d8659;
+            border-radius: 8px;
+            font-size: clamp(0.9rem, 1.8vw, 1.1rem);
+            outline: none;
+            width: clamp(200px, 30vw, 300px);
+        }
+
+        .edit-btn {
+            padding: clamp(8px, 1.5vw, 12px) clamp(15px, 2vw, 20px);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 1.8vw, 1.1rem);
+            transition: all 0.3s ease;
+        }
+
+        .add-btn {
+            background-color: #2d8659;
+            color: white;
+        }
+
+        .add-btn:hover {
+            background-color: #37a06d;
+        }
+
+        .del-btn {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .del-btn:hover {
+            background-color: #c0392b;
+        }
+
+        /* 数据卡片容器 - 智能网格布局 */
+        .data-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: clamp(15px, 2vw, 20px);
+            margin-top: 2vw;
+        }
+
+        /* 全部节点概览卡片 */
+        .all-nodes-card {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: clamp(10px, 1.5vw, 15px);
+            margin-top: 2vw;
+        }
+
+        .node-overview-card {
+            background: white;
+            border-radius: 12px;
+            padding: clamp(15px, 2vw, 20px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .node-overview-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        }
+
+        .node-name {
+            font-size: clamp(1rem, 2vw, 1.1rem);
+            font-weight: bold;
+            color: #2d8659;
+            margin-bottom: clamp(8px, 1vw, 10px);
+        }
+
+        .node-status {
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+            margin-bottom: clamp(8px, 1vw, 10px);
+        }
+
+        .status-online {
+            color: #27ae60;
+        }
+
+        .status-offline {
+            color: #e74c3c;
+        }
+
+        .node-key-data {
+            font-size: clamp(0.9rem, 1.8vw, 1rem);
+            color: #333;
+        }
+
+        /* 数据卡片样式 */
+        .data-card {
+            background: white;
+            border-radius: 12px;
+            padding: clamp(15px, 3vw, 25px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease;
+            text-align: center;
+        }
+
+        .data-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-icon {
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            margin-bottom: 1.5vw;
+            color: #2d8659;
+        }
+
+        .card-title {
+            font-size: clamp(0.9rem, 2vw, 1.1rem);
+            color: #666;
+            margin-bottom: 1vw;
+        }
+
+        .card-value {
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            font-weight: bold;
+            color: #333;
+        }
+
+        .card-unit {
+            font-size: clamp(0.8rem, 2vw, 1rem);
+            color: #888;
+            margin-left: 5px;
+        }
+
+        /* 图表容器 */
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: clamp(15px, 2vw, 20px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-top: 2vw;
+            height: clamp(300px, 40vw, 400px);
+        }
+
+        .update-time {
+            text-align: center;
+            margin-top: 3vw;
+            color: #888;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+        }
+
+        /* 视图切换控制 */
+        #singleNodeView, #allNodesView {
+            display: none;
+        }
+
+        #singleNodeView.active, #allNodesView.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- 头部标题 -->
+    <header>
+        <h1 class="header-title">智慧农业环境监测系统</h1>
+        <h2 class="header-subtitle">多节点实时监测 · 科学种植 · 精准管理</h2>
+    </header>
+
+    <!-- 主要内容容器 -->
+    <div class="container">
+        <!-- 视图切换按钮 -->
+        <div class="view-switch">
+            <button class="view-btn active" id="singleNodeBtn">单节点详情</button>
+            <button class="view-btn" id="allNodesBtn">全部节点概览</button>
+        </div>
+
+        <!-- 单节点视图 -->
+        <div id="singleNodeView" class="active">
+            <!-- 节点选择器 -->
+            <div class="node-selector">
+                <label for="nodeSelect">监测节点：</label>
+                <select id="nodeSelect">
+                    <option value="node1">一号大棚（草莓区）<span class="status-tag">【在线】</span></option>
+                    <option value="node2">二号大棚（番茄区）<span class="status-tag">【在线】</span></option>
+                    <option value="node3">三号大棚（黄瓜区）<span class="status-tag">【在线】</span></option>
+                    <option value="node4">露天种植区（玉米）<span class="status-tag">【离线】</span></option>
+                </select>
+            </div>
+
+            <!-- 自定义节点操作区 -->
+            <div class="node-edit">
+                <input type="text" id="nodeNameInput" placeholder="输入新节点名称">
+                <button class="edit-btn add-btn" id="addNodeBtn">添加节点</button>
+                <button class="edit-btn del-btn" id="delNodeBtn">删除当前节点</button>
+            </div>
+
+            <!-- 数据卡片区域 -->
+            <div class="data-cards">
+                <!-- 温度卡片 -->
+                <div class="data-card">
+                    <div class="card-icon">🌡️</div>
+                    <h3 class="card-title">环境温度</h3>
+                    <div class="card-value">
+                        <span id="temperature">25.6</span>
+                        <span class="card-unit">℃</span>
+                    </div>
+                </div>
+
+                <!-- 光照强度卡片 -->
+                <div class="data-card">
+                    <div class="card-icon">☀️</div>
+                    <h3 class="card-title">光照强度</h3>
+                    <div class="card-value">
+                        <span id="light">8500</span>
+                        <span class="card-unit">lux</span>
+                    </div>
+                </div>
+
+                <!-- 空气湿度卡片 -->
+                <div class="data-card">
+                    <div class="card-icon">💧</div>
+                    <h3 class="card-title">空气湿度</h3>
+                    <div class="card-value">
+                        <span id="humidity">65</span>
+                        <span class="card-unit">%</span>
+                    </div>
+                </div>
+
+                <!-- 土壤温度卡片 -->
+                <div class="data-card">
+                    <div class="card-icon">🌱</div>
+                    <h3 class="card-title">土壤温度</h3>
+                    <div class="card-value">
+                        <span id="soilTemp">22.3</span>
+                        <span class="card-unit">℃</span>
+                    </div>
+                </div>
+
+                <!-- 土壤湿度卡片 -->
+                <div class="data-card">
+                    <div class="card-icon">🌾</div>
+                    <h3 class="card-title">土壤湿度</h3>
+                    <div class="card-value">
+                        <span id="soilHumidity">78</span>
+                        <span class="card-unit">%</span>
+                    </div>
+                </div>
+
+                <!-- CO2浓度卡片 -->
+                <div class="data-card">
+                    <div class="card-icon">🌬️</div>
+                    <h3 class="card-title">CO₂浓度</h3>
+                    <div class="card-value">
+                        <span id="co2">820</span>
+                        <span class="card-unit">ppm</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据图表区域 -->
+            <div class="chart-container" id="dataChart"></div>
+
+            <!-- 更新时间 -->
+            <div class="update-time" id="updateTime">最后更新：2025-12-27 10:00:00</div>
+        </div>
+
+        <!-- 全部节点概览视图 -->
+        <div id="allNodesView">
+            <div class="all-nodes-card" id="allNodesContainer">
+                <!-- 节点概览卡片会通过JS动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 全局变量定义 ==========
+        // 获取DOM元素
+        const nodeSelectEl = document.getElementById('nodeSelect');
+        const temperatureEl = document.getElementById('temperature');
+        const lightEl = document.getElementById('light');
+        const humidityEl = document.getElementById('humidity');
+        const soilTempEl = document.getElementById('soilTemp');
+        const soilHumidityEl = document.getElementById('soilHumidity');
+        const co2El = document.getElementById('co2');
+        const updateTimeEl = document.getElementById('updateTime');
+        const nodeNameInput = document.getElementById('nodeNameInput');
+        const addNodeBtn = document.getElementById('addNodeBtn');
+        const delNodeBtn = document.getElementById('delNodeBtn');
+        const singleNodeBtn = document.getElementById('singleNodeBtn');
+        const allNodesBtn = document.getElementById('allNodesBtn');
+        const singleNodeView = document.getElementById('singleNodeView');
+        const allNodesView = document.getElementById('allNodesView');
+        const allNodesContainer = document.getElementById('allNodesContainer');
+
+        // 节点基础数据（从本地存储加载，没有则使用默认数据）
+        let nodeBaseData = JSON.parse(localStorage.getItem('nodeBaseData')) || {
+            node1: { 
+                name: "一号大棚（草莓区）", 
+                status: "online",
+                temperature: 25.0,
+                light: 8000,
+                humidity: 70,
+                soilTemp: 22.5,
+                soilHumidity: 80,
+                co2: 800,
+                historyData: {
+                    time: [],
+                    temperature: [],
+                    humidity: []
+                }
+            },
+            node2: { 
+                name: "二号大棚（番茄区）", 
+                status: "online",
+                temperature: 26.5,
+                light: 9000,
+                humidity: 65,
+                soilTemp: 23.0,
+                soilHumidity: 75,
+                co2: 850,
+                historyData: {
+                    time: [],
+                    temperature: [],
+                    humidity: []
+                }
+            },
+            node3: { 
+                name: "三号大棚（黄瓜区）", 
+                status: "online",
+                temperature: 27.0,
+                light: 8500,
+                humidity: 75,
+                soilTemp: 22.8,
+                soilHumidity: 85,
+                co2: 780,
+                historyData: {
+                    time: [],
+                    temperature: [],
+                    humidity: []
+                }
+            },
+            node4: { 
+                name: "露天种植区（玉米）", 
+                status: "offline",
+                temperature: 24.0,
+                light: 12000,
+                humidity: 60,
+                soilTemp: 21.5,
+                soilHumidity: 70,
+                co2: 750,
+                historyData: {
+                    time: [],
+                    temperature: [],
+                    humidity: []
+                }
+            }
+        };
+
+        // 初始化ECharts实例
+        const chart = echarts.init(document.getElementById('dataChart'));
+        
+        // ========== 工具函数 ==========
+        // 生成随机数据（基于当前节点的基准值小幅波动）
+        function getRandomValue(base, range) {
+            const random = Math.random() * range * 2 - range;
+            return (base + random).toFixed(1);
+        }
+
+        // 保存节点数据到本地存储
+        function saveNodeData() {
+            localStorage.setItem('nodeBaseData', JSON.stringify(nodeBaseData));
+        }
+
+        // 更新节点下拉选择框
+        function updateNodeSelect() {
+            nodeSelectEl.innerHTML = '';
+            Object.keys(nodeBaseData).forEach(nodeId => {
+                const node = nodeBaseData[nodeId];
+                const statusText = node.status === 'online' ? '【在线】' : '【离线】';
+                const option = document.createElement('option');
+                option.value = nodeId;
+                option.textContent = `${node.name} ${statusText}`;
+                nodeSelectEl.appendChild(option);
+            });
+        }
+
+        // 更新全部节点概览
+        function updateAllNodesView() {
+            allNodesContainer.innerHTML = '';
+            Object.keys(nodeBaseData).forEach(nodeId => {
+                const node = nodeBaseData[nodeId];
+                const statusText = node.status === 'online' ? '在线' : '离线';
+                const statusClass = node.status === 'online' ? 'status-online' : 'status-offline';
+                
+                // 离线节点显示无数据
+                const tempValue = node.status === 'online' ? `${node.temperature}℃` : '无数据';
+                const humiValue = node.status === 'online' ? `${node.humidity}%` : '无数据';
+
+                const card = document.createElement('div');
+                card.className = 'node-overview-card';
+                card.dataset.nodeId = nodeId;
+                card.innerHTML = `
+                    <div class="node-name">${node.name}</div>
+                    <div class="node-status ${statusClass}">${statusText}</div>
+                    <div class="node-key-data">温度：${tempValue}</div>
+                    <div class="node-key-data">湿度：${humiValue}</div>
+                `;
+                
+                // 点击概览卡片切换到对应单节点视图
+                card.addEventListener('click', () => {
+                    singleNodeBtn.click();
+                    nodeSelectEl.value = nodeId;
+                    updateData();
+                });
+                
+                allNodesContainer.appendChild(card);
+            });
+        }
+
+        // 更新图表数据
+        function updateChart(nodeId) {
+            const node = nodeBaseData[nodeId];
+            const history = node.historyData;
+            
+            // 图表配置
+            const option = {
+                title: {
+                    text: `${node.name} 温湿度历史曲线`,
+                    left: 'center',
+                    textStyle: {
+                        fontSize: clamp(16, 2, 20)
+                    }
+                },
+                tooltip: {
+                    trigger: 'axis'
+                },
+                legend: {
+                    data: ['温度(℃)', '湿度(%)'],
+                    bottom: 0
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '15%',
+                    top: '15%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: false,
+                    data: history.time
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [
+                    {
+                        name: '温度(℃)',
+                        type: 'line',
+                        data: history.temperature,
+                        smooth: true,
+                        lineStyle: {
+                            color: '#e74c3c'
+                        },
+                        itemStyle: {
+                            color: '#e74c3c'
+                        }
+                    },
+                    {
+                        name: '湿度(%)',
+                        type: 'line',
+                        data: history.humidity,
+                        smooth: true,
+                        lineStyle: {
+                            color: '#3498db'
+                        },
+                        itemStyle: {
+                            color: '#3498db'
+                        }
+                    }
+                ]
+            };
+            
+            chart.setOption(option);
+        }
+
+        // 辅助函数：模拟clamp（兼容旧浏览器）
+        function clamp(min, vw, max) {
+            const viewportWidth = window.innerWidth / 100;
+            const value = vw * viewportWidth;
+            return Math.max(min, Math.min(value, max));
+        }
+
+        // ========== 核心功能函数 ==========
+        // 更新数据函数（根据当前选中节点更新）
+        function updateData() {
+            // 获取当前选中的节点
+            const currentNodeId = nodeSelectEl.value;
+            const currentNode = nodeBaseData[currentNodeId];
+
+            // 离线节点不更新数据
+            if (currentNode.status === 'offline') {
+                temperatureEl.textContent = '--';
+                lightEl.textContent = '--';
+                humidityEl.textContent = '--';
+                soilTempEl.textContent = '--';
+                soilHumidityEl.textContent = '--';
+                co2El.textContent = '--';
+            } else {
+                // 更新各监测数据（基于当前节点基准值波动）
+                const temp = getRandomValue(currentNode.temperature, 1);
+                const light = Math.floor(getRandomValue(currentNode.light, 500));
+                const humi = Math.floor(getRandomValue(currentNode.humidity, 3));
+                const soilTemp = getRandomValue(currentNode.soilTemp, 0.8);
+                const soilHumi = Math.floor(getRandomValue(currentNode.soilHumidity, 2));
+                const co2 = Math.floor(getRandomValue(currentNode.co2, 30));
+
+                temperatureEl.textContent = temp;
+                lightEl.textContent = light;
+                humidityEl.textContent = humi;
+                soilTempEl.textContent = soilTemp;
+                soilHumidityEl.textContent = soilHumi;
+                co2El.textContent = co2;
+
+                // 更新历史数据（最多保留20条）
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                
+                const history = currentNode.historyData;
+                history.time.push(timeStr);
+                history.temperature.push(Number(temp));
+                history.humidity.push(Number(humi));
+                
+                // 限制历史数据长度
+                if (history.time.length > 20) {
+                    history.time.shift();
+                    history.temperature.shift();
+                    history.humidity.shift();
+                }
+                
+                // 更新图表
+                updateChart(currentNodeId);
+            }
+
+            // 更新时间戳
+            const now = new Date();
+            const timeStr = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            updateTimeEl.textContent = `【${currentNode.name}】最后更新：${timeStr}`;
+            
+            // 同步更新全部节点视图
+            updateAllNodesView();
+        }
+
+        // ========== 事件监听 ==========
+        // 监听节点选择变化事件
+        nodeSelectEl.addEventListener('change', updateData);
+
+        // 视图切换事件
+        singleNodeBtn.addEventListener('click', () => {
+            singleNodeBtn.classList.add('active');
+            allNodesBtn.classList.remove('active');
+            singleNodeView.classList.add('active');
+            allNodesView.classList.remove('active');
+        });
+
+        allNodesBtn.addEventListener('click', () => {
+            allNodesBtn.classList.add('active');
+            singleNodeBtn.classList.remove('active');
+            allNodesView.classList.add('active');
+            singleNodeView.classList.remove('active');
+            updateAllNodesView();
+        });
+
+        // 添加节点事件
+        addNodeBtn.addEventListener('click', () => {
+            const nodeName = nodeNameInput.value.trim();
+            if (!nodeName) {
+                alert('请输入节点名称！');
+                return;
+            }
+
+            // 生成新节点ID
+            const newNodeId = `node${Object.keys(nodeBaseData).length + 1}`;
+            
+            // 添加新节点（默认在线，基准数据取平均值）
+            nodeBaseData[newNodeId] = {
+                name: nodeName,
+                status: 'online',
+                temperature: 25.5,
+                light: 9000,
+                humidity: 68,
+                soilTemp: 22.5,
+                soilHumidity: 78,
+                co2: 800,
+                historyData: {
+                    time: [],
+                    temperature: [],
+                    humidity: []
+                }
+            };
+
+            // 保存并更新UI
+            saveNodeData();
+            updateNodeSelect();
+            nodeNameInput.value = '';
+            alert(`成功添加节点：${nodeName}`);
+        });
+
+        // 删除节点事件
+        delNodeBtn.addEventListener('click', () => {
+            const currentNodeId = nodeSelectEl.value;
+            const currentNode = nodeBaseData[currentNodeId];
+
+            // 至少保留一个节点
+            if (Object.keys(nodeBaseData).length <= 1) {
+                alert('至少需要保留一个节点！');
+                return;
+            }
+
+            if (confirm(`确定要删除节点：${currentNode.name} 吗？`)) {
+                // 删除节点
+                delete nodeBaseData[currentNodeId];
+                
+                // 保存并更新UI
+                saveNodeData();
+                updateNodeSelect();
+                updateData();
+                alert(`成功删除节点：${currentNode.name}`);
+            }
+        });
+
+        // 窗口大小变化时重绘图表
+        window.addEventListener('resize', () => {
+            chart.resize();
+        });
+
+        // ========== 初始化 ==========
+        // 初始化节点选择框
+        updateNodeSelect();
+        // 初始化数据
+        updateData();
+        // 初始化图表
+        updateChart(nodeSelectEl.value);
+        // 每5秒更新一次数据（模拟实时监测）
+        setInterval(updateData, 5000);
+    </script>
+</body>
+</html>
