@@ -33,7 +33,7 @@ static bool IRAM_ATTR example_rmt_rx_done_callback(rmt_channel_handle_t channel,
 
 /** DHT11初始化
  * @return 无
-*/
+**/
 void DHT11_Init(void)
 {
     rmt_rx_channel_config_t rx_chan_config = {

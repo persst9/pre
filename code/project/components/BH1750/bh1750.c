@@ -8,7 +8,7 @@
 #define bh1750_write_addr 0x46
 #define bh1750_read_addr  0x47
 
-static float light = 0 ; 
+static float light = 0; 
 
 void bh1750_send_cmd(uint8_t cmd_data)
 {
