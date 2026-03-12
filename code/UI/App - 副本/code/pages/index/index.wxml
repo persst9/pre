@@ -1,0 +1,61 @@
+<navigation-bar title="智慧农场监测系统" back="{{false}}" color="black" background="#FFF"></navigation-bar>
+<view class="container">
+  <view class="header">
+    <text class="farm-title">🌱 智慧农场</text>
+  </view>
+  <view class="add-btn" hover-class="btn-hover" bindtap="addNode">+ 添加大棚</view>
+  <scroll-view class="node-tabs" scroll-x enable-flex>
+    <view wx:for="{{nodes}}" wx:key="id" class="tab-item {{currentNodeIndex === index ? 'active' : ''}}" bindtap="switchNode" data-index="{{index}}">
+      {{item.name}}
+      <view class="delete-icon" catchtap="deleteNode" data-index="{{index}}">×</view>
+    </view>
+  </scroll-view>
+
+  <view class="detail-card">
+    <view class="card-header">
+      <view class="card-title" bindtap="handleNameTap">
+        {{nodes[currentNodeIndex].name}} <text class="edit-tip">(双击改名)</text>
+      </view>
+      <view class="setting-icon" bindtap="setThreshold">⚙️ 阈值管理</view>
+    </view>
+    
+    <view class="sensor-grid">
+      <view class="sensor-item {{nodes[currentNodeIndex].temp > nodes[currentNodeIndex].threshold.temp ? 'alarm' : ''}}">
+        <text class="label">温度 {{nodes[currentNodeIndex].temp > nodes[currentNodeIndex].threshold.temp ? '⚠️' : ''}}</text>
+        <text class="value">{{nodes[currentNodeIndex].temp}}℃</text>
+        <text class="threshold-tag">上限: {{nodes[currentNodeIndex].threshold.temp}}</text>
+      </view>
+
+      <view class="sensor-item {{nodes[currentNodeIndex].soil < nodes[currentNodeIndex].threshold.soil ? 'alarm' : ''}}">
+        <text class="label">土壤湿度 {{nodes[currentNodeIndex].soil < nodes[currentNodeIndex].threshold.soil ? '⚠️' : ''}}</text>
+        <text class="value">{{nodes[currentNodeIndex].soil}}%</text>
+        <text class="threshold-tag">下限: {{nodes[currentNodeIndex].threshold.soil}}</text>
+      </view>
+
+      <view class="sensor-item {{nodes[currentNodeIndex].light > nodes[currentNodeIndex].threshold.light ? 'alarm' : ''}}">
+        <text class="label">光照强度 {{nodes[currentNodeIndex].light > nodes[currentNodeIndex].threshold.light ? '⚠️' : ''}}</text>
+        <text class="value">{{nodes[currentNodeIndex].light}}</text>
+        <text class="threshold-tag">上限: {{nodes[currentNodeIndex].threshold.light}}</text>
+      </view>
+
+      <view class="sensor-item {{nodes[currentNodeIndex].hum > nodes[currentNodeIndex].threshold.hum ? 'alarm' : ''}}">
+        <text class="label">空气湿度 {{nodes[currentNodeIndex].hum > nodes[currentNodeIndex].threshold.hum ? '⚠️' : ''}}</text>
+        <text class="value">{{nodes[currentNodeIndex].hum}}%</text>
+        <text class="threshold-tag">上限: {{nodes[currentNodeIndex].threshold.hum}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="divider"></view>
+
+  <view class="control-section">
+    <view class="control-item">
+      <text>排气风扇</text>
+      <switch checked="{{nodes[currentNodeIndex].fan}}" bindchange="toggleFan" color="#4CAF50" />
+    </view>
+    <view class="control-item">
+      <text>灌溉水泵</text>
+      <switch checked="{{nodes[currentNodeIndex].pump}}" bindchange="togglePump" color="#4CAF50" />
+    </view>
+  </view>
+</view>

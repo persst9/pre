@@ -15,5 +15,5 @@
     "TS.C": "cpp"
   },
   "idf.flashType": "UART",
-  "idf.portWin": "COM6"
+  "idf.portWin": "COM14"
 }

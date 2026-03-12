@@ -1,0 +1,163 @@
+/* pages/dashboard/index.wxss */
+.container {
+  padding: 20rpx;
+  background-color: #f7fdf7;
+}
+
+.header {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30rpx;
+}
+
+.farm-title {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #2e7d32;
+}
+
+.add-btn {
+  font-size: 26rpx;
+  background: #4CAF50;
+  color: white;
+  padding: 10rpx 20rpx;
+  border-radius: 10rpx;
+  margin-bottom: 30rpx;
+}
+
+.btn-hover {
+  background-color: #388E3C !important;
+  transform: scale(0.95);
+}
+
+.node-tabs {
+  display: flex;
+  white-space: nowrap;
+  margin-bottom: 30rpx;
+  height: 80rpx;
+}
+
+.tab-item {
+  display: inline-block;
+  padding: 15rpx 40rpx;
+  background: #fff;
+  margin-right: 20rpx;
+  border-radius: 40rpx;
+  border: 1rpx solid #eee;
+  position: relative;
+}
+
+.tab-item.active {
+  background: #4CAF50;
+  color: white;
+  border-color: #4CAF50;
+}
+
+.delete-icon {
+  position: absolute;
+  top: -10rpx;
+  right: 0;
+  width: 30rpx;
+  height: 30rpx;
+  background: #ff5252;
+  color: white;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 26rpx;
+  font-size: 20rpx;
+}
+
+.detail-card {
+  background: white;
+  width: 500rpx;
+  border-radius: 20rpx;
+  padding: 30rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+}
+
+.card-title {
+  font-size: 32rpx;
+  margin-bottom: 30rpx;
+  font-weight: 500;
+  border-left: 8rpx solid #4CAF50;
+  padding-left: 20rpx;
+}
+
+.sensor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20rpx;
+}
+
+.sensor-item {
+  background: #f9f9f9;
+  padding: 30rpx;
+  border-radius: 15rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  font-size: 24rpx;
+  color: #666;
+  margin-bottom: 10rpx;
+}
+
+.value {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.divider {
+  height: 1rpx;
+  background: #eee;
+  margin: 40rpx 0;
+}
+
+.control-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+/* 报警样式 */
+.sensor-item.alarm {
+  background-color: #fff5f5; /* 浅红背景 */
+  border: 2rpx solid #ff4d4f;
+}
+.sensor-item.alarm .value {
+  color: #ff4d4f; /* 数值变红 */
+}
+.sensor-item.alarm .label {
+  color: #cf1322;
+  font-weight: bold;
+}
+
+/* 阈值标签样式 */
+.threshold-tag {
+  font-size: 20rpx;
+  color: #999;
+  margin-top: 10rpx;
+}
+
+/* 顶部标题栏 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30rpx;
+}
+.edit-tip {
+  font-size: 22rpx;
+  color: #bbb;
+  font-weight: normal;
+}
+.setting-icon {
+  font-size: 26rpx;
+  color: #4CAF50;
+  border: 1rpx solid #4CAF50;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+}

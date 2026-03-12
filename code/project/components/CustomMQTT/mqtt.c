@@ -19,70 +19,123 @@
 #include "mqtt_client.h"
 #include "esp_sntp.h"
 #include <time.h>
+#include "mqtt.h"
+#include "cJSON.h" // 可选：JSON解析库（注释掉表示直接拼接JSON）
 
-#include "wifi_sta.h" // 自定义WiFi STA模式驱动（需自行实现）
-// #include "cJSON.h"         // 可选：JSON解析库（注释掉表示直接拼接JSON）
-#include "lora.h" // 自定义LoRa驱动（需自行实现）
-
+#include "wifi_sta.h" // 自定义WiFi STA模式驱动
+#include "lora.h"     // 自定义LoRa驱动
+#include "my_main.h"
 // 日志标签：用于区分MQTT模块的日志输出
 static const char *TAG = "MQTT";
 
 extern const uint8_t emqxsl_ca_crt_start[] asm("_binary_emqxsl_ca_crt_start");
-extern const uint8_t emqxsl_ca_crt_end[]   asm("_binary_emqxsl_ca_crt_end");
+extern const uint8_t emqxsl_ca_crt_end[] asm("_binary_emqxsl_ca_crt_end");
 /**************************MQTT配置参数 **************************/
 #define MQTT_ADDRESS "mqtts://qa1ba1e7.ala.cn-hangzhou.emqxsl.cn" // MQTT服务器地址
 #define MQTT_PORT 8883                                            // MQTT端口（1883=TCP，8883=SSL/TLS）
-#define MQTT_CLIENT   "ESP32_S3"                                 // 设备ID
+#define MQTT_CLIENT "ESP32_S3"                                    // 设备ID
 #define MQTT_USERNAME "lin"                                       // （MQTT用户名）
 // 密码
 #define MQTT_PASSWORD "123456"
 
 /************************** MQTT主题配置 **************************/
 // 数据上报主题（JSON格式）
-#define MQTT_PUBLIC_TOPIC "smart/pub"
-#define MQTT_SUBSCRIBE_TOPIC "smart/sub" // 测试订阅主题（接收云端下发指令）
-
+#define MQTT_PUBLIC_TOPIC "/smart/sub"
+#define MQTT_SUBSCRIBE_TOPIC "smart/pub" // 测试订阅主题（接收云端下发指令）
+#define SMART_NODE_PREFIX "smartNode_"
 /************************** 全局事件与状态 **************************/
 // 事件组：用于同步WiFi连接状态（通知main函数WiFi连接成功）
 #define WIFI_CONNECT_BIT BIT0
 static EventGroupHandle_t s_wifi_ev = NULL; // WiFi事件组句柄
 
-/************************** 数据结构定义 **************************/
-// LoRa节点传感器数据结构体
-typedef struct node_t
-{
-    uint8_t node_id; // 节点ID（区分不同LoRa设备）
-    int16_t temp;    // 温度（原始值，需除以10得到实际值，如255=25.5℃）
-    int16_t humi;    // 湿度（原始值，如600=60.0%RH）
-    int16_t light;   // 光照强度（原始值）
-    int16_t soil;    // 土壤湿度（原始值）
-} node_data_t;
-
 /************************** 全局变量 **************************/
-uint8_t data_buf[30] = {0};                           // LoRa接收数据缓冲区
-char res_data[30] = {0};                              // 存储MQTT接收的消息内容
-char res_topic[30] = {0};                             // 存储MQTT接收的消息主题
 static esp_mqtt_client_handle_t s_mqtt_client = NULL; // MQTT客户端操作句柄
 static bool s_is_mqtt_connected = false;              // MQTT连接状态标志
-//时间同步
+void pubData(const char *data_buf);
+EventGroupHandle_t gateway_event_group = NULL;
+/**
+ * @brief 解析 greenhouse 数据
+ * @param json_str 接收到的原始 MQTT 字符串
+ */
+void parse_greenhouse_data(const char *json_str)
+{
+    cJSON *root = cJSON_Parse(json_str);
+    if (root == NULL)
+    {
+        ESP_LOGE(TAG, "JSON 格式错误，无法解析");
+        return;
+    }
+    cJSON *sendHeard = cJSON_GetObjectItem(root, "action");
+    if (cJSON_IsString(sendHeard) && (sendHeard->valuestring != NULL))
+    {
+        if (sendHeard->valuestring != NULL && strcmp(sendHeard->valuestring, "addNode") == 0)
+        {
+            ESP_LOGI(TAG, "received addNode command");
+            xEventGroupSetBits(gateway_event_group, NEW_NODE_EVENT_BIT); // 设置新节点事件标志
+        }
+        else if (sendHeard->valuestring != NULL && strcmp(sendHeard->valuestring, "deleteNode") == 0)
+        {
+            cJSON *nodeId = cJSON_GetObjectItem(root, "nodeId");
+            if (cJSON_IsString(nodeId) && (nodeId->valuestring != NULL))
+            {
+                if (gateway_delete_node_by_id((uint8_t *)nodeId->valuestring))
+                {
+                    ESP_LOGI(TAG, "delete node success");
+                }
+            }
+        }
+        else if (sendHeard->valuestring != NULL && strcmp(sendHeard->valuestring, "Control") == 0)
+        {
+            nodeFP_t nodeData = {
+                .Id1 = (uint8_t)cJSON_GetObjectItem(root, "id")->valueint,
+                .fan = (uint8_t *)cJSON_GetObjectItem(root, "f")->valueint,
+                .pump = (uint8_t *)cJSON_GetObjectItem(root, "p")->valueint,
+                .light = (uint8_t *)cJSON_GetObjectItem(root, "L")->valueint,
+                .thresholdStatus = false
+            };
+            xQueueSend(FanPQueue, &nodeData, portMAX_DELAY);
+            xEventGroupSetBits(gateway_event_group, NODE_DATA_EVENT_BIT);
+            ESP_LOGI(TAG, "receive Control");
+        }
+        else if (sendHeard->valuestring != NULL && strcmp(sendHeard->valuestring, "threshold") == 0)
+        {
+            ESP_LOGI(TAG, "receive threshold");
+            nodeFP_t nodeDataT = {
+                .Id1 = (uint8_t)cJSON_GetObjectItem(root, "nodeId")->valueint,
+                .keyThreshold = (char *)cJSON_GetObjectItem(root, "key")->valuestring,
+                .valueThreshold = (uint16_t)cJSON_GetObjectItem(root, "value")->valueint,
+                .thresholdStatus = true
+            };
+            xQueueSend(FanPQueue, &nodeDataT, portMAX_DELAY);
+        }
+    }
+    // 释放内存
+    cJSON_Delete(root);
+}
+
+// 时间同步
 static void wait_for_time(void)
 {
     time_t now = 0;
-    struct tm timeinfo = { 0 };
+    struct tm timeinfo = {0};
 
     int retry = 0;
     const int retry_count = 15;
 
-    while (timeinfo.tm_year < (2020 - 1900) && ++retry < retry_count) {
+    while (timeinfo.tm_year < (2026 - 1900) && ++retry < retry_count)
+    {
         ESP_LOGI(TAG, "Waiting for system time to be set... (%d)", retry);
         vTaskDelay(pdMS_TO_TICKS(2000));
         time(&now);
         localtime_r(&now, &timeinfo);
     }
 
-    if (timeinfo.tm_year < (2020 - 1900)) {
+    if (timeinfo.tm_year < (2026 - 1900))
+    {
         ESP_LOGE(TAG, "System time NOT set!");
-    } else {
+    }
+    else
+    {
         ESP_LOGI(TAG, "System time is set");
     }
 }
@@ -141,11 +194,23 @@ static void aliot_mqtt_event_handler(void *event_handler_arg,
 
     case MQTT_EVENT_DATA: // 收到订阅主题的消息
         // 打印收到的主题和消息内容
-        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s\r\n", event->data_len, event->data);
-        // 将收到的主题/消息存储到全局变量（供其他函数使用）
-        sprintf(res_topic, "%.*s", event->topic_len, event->topic);
-        sprintf(res_data, "%.*s", event->data_len, event->data);
+        // printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
+        // printf("DATA=%.*s\r\n", event->data_len, event->data);
+        char *received_data = malloc(event->data_len + 1);
+        if (received_data)
+        {
+            memcpy(received_data, event->data, event->data_len);
+            received_data[event->data_len] = '\0';
+
+            // ESP_LOGI(TAG, "received data: %s", received_data);
+
+            // 调用解析函数
+            parse_greenhouse_data(received_data);
+
+            free(received_data);
+        }
+        ESP_LOGI(TAG, "TOPIC=%.*s\r\n", event->topic_len, event->topic);
+        ESP_LOGI(TAG, "DATA=%.*s\r\n", event->data_len, event->data);
         break;
 
     case MQTT_EVENT_ERROR: // MQTT错误事件
@@ -171,24 +236,24 @@ void mqtt_start(void)
     esp_mqtt_client_config_t mqtt_cfg = {0};
     mqtt_cfg.broker.address.uri = MQTT_ADDRESS;
     mqtt_cfg.broker.address.port = MQTT_PORT;
-    //Client ID
+    // Client ID
     mqtt_cfg.credentials.client_id = MQTT_CLIENT;
-    //用户名
+    // 用户名
     mqtt_cfg.credentials.username = MQTT_USERNAME;
-    //密码
+    // 密码
     mqtt_cfg.credentials.authentication.password = MQTT_PASSWORD;
     mqtt_cfg.broker.verification.certificate =
-    (const char *)emqxsl_ca_crt_start;
+        (const char *)emqxsl_ca_crt_start;
 
     mqtt_cfg.broker.verification.skip_cert_common_name_check = false;
 
-    ESP_LOGI(TAG,"mqtt connect->clientId:%s,username:%s,password:%s",mqtt_cfg.credentials.client_id,
-    mqtt_cfg.credentials.username,mqtt_cfg.credentials.authentication.password);
-    //设置mqtt配置，返回mqtt操作句柄
+    ESP_LOGI(TAG, "mqtt connect->clientId:%s,username:%s,password:%s", mqtt_cfg.credentials.client_id,
+             mqtt_cfg.credentials.username, mqtt_cfg.credentials.authentication.password);
+    // 设置mqtt配置，返回mqtt操作句柄
     s_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
-    //注册mqtt事件回调函数
+    // 注册mqtt事件回调函数
     esp_mqtt_client_register_event(s_mqtt_client, ESP_EVENT_ANY_ID, aliot_mqtt_event_handler, s_mqtt_client);
-    //启动mqtt连接
+    // 启动mqtt连接
     esp_mqtt_client_start(s_mqtt_client);
 }
 
@@ -208,54 +273,32 @@ void wifi_event_handler(WIFI_EV_e ev)
     }
 }
 
-/**
- * @brief 读取LoRa传感器数据并发布到平台
- *        1. 从LoRa模块读取原始数据
- *        2. 解析为传感器数据结构体
- *        3. 封装为JSON格式，通过MQTT发布到
- * @param node_data 传感器数据结构体（输出参数，存储解析后的数据）
- * @return 无
- */
-void pubData(node_data_t node_data)
+// 需确保NODE_ID宏定义正确（此处基于#define NODE_ID smartNode_调整，建议补充完整字符串）
+// 若NODE_ID为节点名称常量，建议定义为：#define NODE_ID "smartNode_"
+void pubData(const char *data_buf)
 {
-    // 从LoRa模块接收数据到缓冲区（lora_receive需自行实现，阻塞/非阻塞需确认）
-    lora_receive(data_buf, sizeof(data_buf));
-
-    // 解析LoRa原始数据到结构体（需与LoRa发送端数据格式一致）
-    node_data.node_id = data_buf[1]; // 第2字节：节点ID
-    node_data.temp = data_buf[2];    // 第3字节：温度原始值
-    node_data.humi = data_buf[3];    // 第4字节：湿度原始值
-    node_data.light = data_buf[4];   // 第5字节：光照原始值
-    node_data.soil = data_buf[5];    // 第6字节：土壤湿度原始值
-
-    // 封装JSON格式消息（OneNET平台要求JSON格式）
-    char mqtt_playload[128] = {0}; // JSON缓冲区（足够存储传感器数据）
-    snprintf(mqtt_playload, sizeof(mqtt_playload),
-             "{\"node_id\":%d,\"temp\":%.1f,\"humi\":%.1f,\"light\":%.1f,\"soil\":%.1f}",
-             node_data.node_id,
-             node_data.temp / 10.0, // 原始值/10 = 实际值（如25→2.5℃，需确认发送端倍率）
-             node_data.humi / 10.0,
-             node_data.light / 10.0,
-             node_data.soil / 10.0);
-
-    // 检查MQTT连接状态，避免断连时发布消息
     if (s_is_mqtt_connected)
     {
-        // 发布消息到OneNET数据上报主题
-        // 参数：客户端句柄、主题、消息内容、消息长度、QoS、是否保留
         esp_mqtt_client_publish(s_mqtt_client,
                                 MQTT_PUBLIC_TOPIC,
-                                mqtt_playload,
-                                strlen(mqtt_playload),
-                                0,  // QoS=0：最多一次送达（OneNET推荐QoS=0）
-                                0); // retain=0：不保留消息
-        ESP_LOGI(TAG, "Publish data to OneNET: %s", mqtt_playload);
+                                data_buf,
+                                strlen(data_buf),
+                                0,
+                                0);
+        ESP_LOGI(TAG, "Publish success: %s", data_buf);
     }
     else
     {
-        ESP_LOGW(TAG, "MQTT not connected, skip publish");
+        ESP_LOGW(TAG, "MQTT not connected");
     }
 }
+
+// 补充说明：
+// 1. 数据解析调整：原结构体为单字节数据，新结构体temp等为int16_t，需合并2字节（需与发送端字节序一致，默认大端）
+//    若发送端为小端模式，需修改为：node_data.temp = (data_buf[3] << 8) | data_buf[2];
+// 2. 节点名称：NODE_ID需定义为字符串（如#define NODE_ID "smartNode_01"），避免编译错误
+// 3. 缓冲区扩大：从128字节改为256字节，适配节点名称字符串与更多字段内容
+// 4. bool类型适配：JSON不直接支持bool，转为1/0数字，便于OneNET平台解析
 
 /**
  * @brief 处理MQTT订阅消息（预留函数）
@@ -277,7 +320,7 @@ node_data_t subData(void)
  * @param 无
  * @return 无
  */
-void mqtt_task(void)
+void mqtt_init(void)
 {
     // 初始化NVS闪存（WiFi配置、MQTT参数等非易失性存储）
     esp_err_t ret = nvs_flash_init();
@@ -299,29 +342,29 @@ void mqtt_task(void)
     // 参数：事件组、等待的标志位、清除标志位、等待所有位、最大等待时间
     ev = xEventGroupWaitBits(s_wifi_ev, WIFI_CONNECT_BIT, pdTRUE, pdFALSE, portMAX_DELAY);
     sync_time();
-    wait_for_time();//等待时间同步完成
-    if (ev & WIFI_CONNECT_BIT)       // WiFi连接成功
+    wait_for_time();           // 等待时间同步完成
+    if (ev & WIFI_CONNECT_BIT) // WiFi连接成功
     {
         ESP_LOGI(TAG, "WiFi connected, start MQTT");
         mqtt_start(); // 启动MQTT客户端
     }
 
-    // 临时缓冲区（未使用，可删除）
-    static char mqtt_pub_buff[64];
-    int count = 0;
-    // 主循环：保持任务运行，可在此处添加数据采集/发布逻辑
-    while (1)
-    {
-        
-        //延时2秒发布一条消息到/test/topic1主题
-        if(s_is_mqtt_connected)
-        {
-            snprintf(mqtt_pub_buff,64,"{\"count\":\"%d\"}",count);
-            esp_mqtt_client_publish(s_mqtt_client, MQTT_PUBLIC_TOPIC,
-                            mqtt_pub_buff, strlen(mqtt_pub_buff),1, 0);
-            count++;
-        }
+    // // 临时缓冲区（未使用，可删除）
+    // static char mqtt_pub_buff[64];
+    // int count = 0;
+    // // 主循环：保持任务运行，可在此处添加数据采集/发布逻辑
+    // while (1)
+    // {
 
-        vTaskDelay(pdMS_TO_TICKS(2000));
-    }
+    //     // 延时2秒发布一条消息到/test/topic1主题
+    //     if (s_is_mqtt_connected)
+    //     {
+    //         snprintf(mqtt_pub_buff, 64, "{\"count\":\"%d\"}", count);
+    //         esp_mqtt_client_publish(s_mqtt_client, MQTT_PUBLIC_TOPIC,
+    //                                 mqtt_pub_buff, strlen(mqtt_pub_buff), 1, 0);
+    //         count++;
+    //     }
+
+    //     vTaskDelay(pdMS_TO_TICKS(2000));
+    // }
 }

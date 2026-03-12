@@ -10,36 +10,32 @@
 #include "hal/adc_types.h"
 
 // ========================== 配置参数（可通过头文件宏定义适配） ==========================
-#define EXAMPLE_READ_LEN                8
+#define EXAMPLE_READ_LEN  8
+#define EMA_ALPHA   0.05f
 // ========================== 全局变量（改为 static + 对外接口） ==========================
-static const char *TAG = "TS";
-static TaskHandle_t s_task_handle = NULL;  // 主任务句柄（跨文件访问需提供 setter）
+static const char *TAG = "TS APP";
+static QueueHandle_t adc_queue = NULL;
 static adc_continuous_handle_t s_adc_handle = NULL; // ADC 句柄
 
-uint8_t *data_value;
-uint16_t adc_data,adc_value;
-uint16_t adc_sum = 0;
-uint8_t adc_channelnum;
-uint8_t adc_num = 0; // ADC 采样次数
+static volatile uint16_t adc_value = 0;
+static volatile uint16_t adc_filtered = 0;
+static float ema_value = 0.0f;
+
 // ========================== 中断回调函数（核心逻辑不变，仅修改作用域） ==========================
-bool  adc_conv_done_cb(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data)
+bool  adc_conv_done_cb(adc_continuous_handle_t handle,
+                      const adc_continuous_evt_data_t *edata,
+                      void *user_data)
 {
-    data_value = edata->conv_frame_buffer;
-    if(edata->size > 0)
-    {
-        adc_data = ((data_value[1]&0x0f) << 8) | data_value[0];
-        adc_channelnum = data_value[1] >> 5 ;
-        adc_num++;
-        adc_sum += adc_data;
-        if(adc_num == 100)
-        {
-            adc_num = 0;
-            adc_value = (adc_sum/100);
-            adc_sum = 0;
-        }
-        return true;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    for (int i = 0; i < edata->size; i += 2) {
+        uint16_t raw = ((edata->conv_frame_buffer[i + 1] & 0x0F) << 8)
+                        | edata->conv_frame_buffer[i];
+        if(adc_queue)
+        xQueueSendFromISR(adc_queue, &raw, &xHigherPriorityTaskWoken);
     }
-    return false;
+
+    return xHigherPriorityTaskWoken == pdTRUE;
 }
 // ========================== 私有函数（仍用 static） =========================
 static void continuous_adc_init(void)
@@ -58,11 +54,12 @@ static void continuous_adc_init(void)
     };
 
     adc_continuous_config_t dig_cfg = {
-        .sample_freq_hz = 20 * 1000,
+        .sample_freq_hz = 1 * 1000,
         .conv_mode = ADC_CONV_SINGLE_UNIT_1,
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
         .adc_pattern = adc_digi_pattern,
         .pattern_num = 1,
+        
     };
     ESP_ERROR_CHECK(adc_continuous_config(s_adc_handle, &dig_cfg));
     // 注册回调（核心：绑定改造后的回调函数）
@@ -73,20 +70,50 @@ static void continuous_adc_init(void)
     ESP_ERROR_CHECK(adc_continuous_start(s_adc_handle));
 }
 
-// ========================== 对外接口（供主文件调用） ==========================
+static void adc_process_task(void *arg)
+{
+    uint16_t raw;
 
+    while (1) {
+        if (xQueueReceive(adc_queue, &raw, portMAX_DELAY)) {
+
+            if (ema_value == 0.0f) {
+                ema_value = raw;   // 首次初始化
+            } else {
+                ema_value += EMA_ALPHA * ((float)raw - ema_value);
+            }
+            adc_filtered = (uint16_t)ema_value;
+        }
+    }
+}
+
+// ========================== 对外接口（供主文件调用） ==========================
 void adc_ts_init(void)
 {
+    adc_queue = xQueueCreate(32, sizeof(uint16_t));
+    if (adc_queue == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create adc queue");
+    }
+    xTaskCreate(adc_process_task, "adc_process_task", 2048, NULL, 5, NULL);
     continuous_adc_init();
 }
+
+
+
 uint16_t adc_continuous_read_data(void)
 {
-    uint16_t ts_data = 0;
-    if(adc_value != 0)
+    return adc_filtered;;
+}
+
+void ts_main(void)
+{
+    adc_ts_init();
+    while (1)
     {
-        ts_data = adc_value;
-        ESP_LOGI(TAG, "ADC value: %u", adc_value);
-        adc_value = 0;
+        uint16_t ts_data = adc_continuous_read_data();
+        //延时
+        ESP_LOGI(TAG, "TS value: %u", ts_data);
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
     }
-    return ts_data;
 }

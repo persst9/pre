@@ -1,7 +1,7 @@
 #include "lora.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
-
+#include "mqtt.h"
 #define receive_buffer_size 1024
 #define send_buffer_size 1024
 #define baud_rate_num 9600
@@ -11,14 +11,14 @@ uint8_t send_head = 0x55;
 uint8_t send_tail = 0xAA;
 
 static const char *TAG = "lora"; // 定义日志标签
-
+QueueHandle_t uart_queue = NULL; // 队列句柄
 /**
  * @brief  初始化UART1串口通信配置
  * @note   配置参数：9600波特率、8位数据位、1位停止位、无校验、无硬件流控
  * @param  无
  * @retval 无
  */
-void lora_init(QueueHandle_t *uart_queue)
+void lora_init(void)
 {
     // 定义UART配置结构体并初始化参数
     uart_config_t   uart_structure = {
@@ -44,6 +44,7 @@ void lora_init(QueueHandle_t *uart_queue)
      * - -1：CTS引脚（禁用硬件流控，设为-1）
      */
     uart_set_pin(USER_UART_NUM, USER_UART_TX_PIN, USER_UART_RX_PIN, -1, -1);
+    //gpio_set_pull_mode(USER_UART_RX_PIN, GPIO_PULLUP_ONLY);
 
     /**
      * 安装UART驱动并分配缓冲区
@@ -56,12 +57,25 @@ void lora_init(QueueHandle_t *uart_queue)
      * - 0：驱动安装标志（无特殊标志）
      */
     uart_driver_install(USER_UART_NUM, receive_buffer_size , send_buffer_size , 
-                        20, uart_queue, 0);
+                        20, &uart_queue, 0);
+    uint8_t AT[10] = "+++";
+    lora_send(AT, 10); // 发送AT指令
+    lora_receive(AT, 10); // 接收AT指令的响应
+    if(AT[0] == 'O' && AT[1] == 'K')
+    {
+        AT[0] = 'A';
+        AT[1] = 'T';
+        AT[2] = '&';
+        AT[3] = 'F';
+        AT[4] = '/r';
+        AT[5] = '/n';
+        lora_send(AT, 10); // 发送AT指令
+    }
 }
 
 void lora_send(uint8_t *data, uint16_t len)
 {
-    uart_write_bytes(USER_UART_NUM, (const char *)data, len); // 发送数据
+    uart_write_bytes(USER_UART_NUM, (char *)data, len); // 发送数据
 }
 
 void lora_receive(uint8_t *data, uint16_t len)

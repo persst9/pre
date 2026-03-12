@@ -1,11 +1,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-
+#include "esp_log.h"
+#include "ware.h"
 static const char* TAG = "gpio_init";
-#define FAN_PIN   GPIO_NUM_21
-#define LED_PIN   GPIO_NUM_38
-#define MOTOR_PIN GPIO_NUM_39
 
 
 
@@ -26,5 +24,19 @@ void gpio_init(void)
     };
     // 调用GPIO配置函数，将上述配置应用到硬件中
     gpio_config(&gpio_structure);
+    //翻转GPIO状态
 }
 
+void SaveNodeId(uint8_t node_id)
+{
+    // 保存节点ID
+}
+
+void ReadNodeId(uint8_t *node_id)
+{
+    // 读取节点ID
+}
+void deleteNodeId(uint8_t node_id)
+{
+    // 删除节点ID
+}

@@ -14,4 +14,5 @@ void adc_ts_init(void);
  * @brief 读取ADC采样数据（主任务循环调用）
  */
 uint16_t adc_continuous_read_data(void);
+void ts_main(void);
 #endif

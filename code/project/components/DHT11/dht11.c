@@ -8,8 +8,8 @@
 #include "esp_system.h"
 
 #define TAG		"DHT11"
-#define DHT11_GPIO	15		// DHT11引脚定义
-uint8_t DHT11_PIN = DHT11_GPIO;
+#define DHT11_GPIO	16		// DHT11引脚定义
+static const gpio_num_t DHT11_PIN = GPIO_NUM_16;
 // 温度 湿度变量
 static int temp = 0,hum = 0;
 //rmt接收通道句柄
@@ -129,6 +129,7 @@ static int parse_items(rmt_symbol_word_t *item, int item_num, int *humidity, int
 */
 int DHT11_StartGet(int *temp_x10, int *humidity)
 {
+	//ESP_LOGE("DHT11", "PIN=%u", DHT11_PIN);
 	//发送20ms开始信号脉冲启动DHT11单总线
 	gpio_set_direction(DHT11_PIN, GPIO_MODE_OUTPUT);
 	gpio_set_level(DHT11_PIN, 1);

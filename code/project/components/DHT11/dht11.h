@@ -14,5 +14,5 @@ void DHT11_Init(void);
  * @return 无
 */
 int DHT11_StartGet(int *temp_x10, int *humidity);
-
+void dht11_main(void);
 #endif
