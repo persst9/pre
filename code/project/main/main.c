@@ -11,6 +11,7 @@
 #include "cJSON.h"
 #include "esp_system.h"
 #include "esp_mac.h"
+#include "freertos/semphr.h"
 
 #include "my_nvs.h"
 #include "my_main.h"
@@ -21,14 +22,19 @@
 #include "mqtt.h"
 #include "lora.h"
 
-#define SERVER 1
+#define SERVER 0
 #define LORA_NUM 1
 #define LORA_MAX_FRAME 128
+// 定义峰值常量（便于后续修改）
+#define PEAK_VALUE 1995
+#define MAX_PERCENT 100.0f
 static const char *TAG = "main";
 TaskHandle_t add_node_task_handle = NULL;
 static uint8_t uart_buffer[256]; // 定义UART接收缓冲区
 static char frame_buf[128];
 static int frame_len = 0;
+SemaphoreHandle_t ware_Status_sem = NULL;
+static FPStatus_t fpStatus = {0};             // 风扇、水泵、补光灯状态
 QueueHandle_t FanPQueue = NULL;               // 传感器数据队列
 node_data_t node_data[LORA_NUM];              // 节点数据
 static node_entry_t node_table[MAX_NODE_NUM]; // 节点表
@@ -38,7 +44,7 @@ static uint8_t nodeNum = 0;                   // 节点数量
 static bool nodeAddStatus = false;            // 节点添加状态
 uint8_t macId[6];                             // 节点MAC地址
 static ThVal_t thVal = {0};                   // 温湿度值
-static FPStatus_t fpStatus = {0};             // 风扇、水泵、补光灯状态
+static uint8_t light_flag = 0;
 static const crop_param_t crop_table[] = {
     {
         .name = "Tomato",
@@ -57,15 +63,88 @@ static const crop_param_t crop_table[] = {
         .thi_high = 52,
     }};
 static const crop_param_t *crop = &crop_table[0];
+SemaphoreHandle_t ware_Status_sem;
+static char p_sendData[64] = {0};
+void loraDataSendServer(const char *data);
+static void fan_on(void)
+{
+    // ESP_LOGI(TAG, "Fan ON");
+    FAN_ON;
+    xSemaphoreTake(ware_Status_sem, portMAX_DELAY);
+    fpStatus.fan_status = true;
 
-static void fan_on_high(void) { ESP_LOGI(TAG, "Fan ON"); }
-static void fan_off(void) { ESP_LOGI(TAG, "Fan OFF"); }
-static void fan_on_low(void) { ESP_LOGI(TAG, "Fan ON LOW"); }
-static void pump_on(void) { ESP_LOGI(TAG, "Pump ON"); }
-static void pump_off(void) { ESP_LOGI(TAG, "Pump OFF"); }
-static void pump_on_pulse(void) { ESP_LOGI(TAG, "Pump ON LOW"); }
-static void light_on(void) { ESP_LOGI(TAG, "Light ON"); }
-static void light_off(void) { ESP_LOGI(TAG, "Light OFF"); }
+    xSemaphoreGive(ware_Status_sem);
+    snprintf(p_sendData, sizeof(p_sendData),
+             "{\"id\":%d,\"fan\":%d, \"pump\":%d, \"led\":%d}",
+             node_id, fpStatus.fan_status, fpStatus.pump_status, fpStatus.led_status);
+    loraDataSendServer(p_sendData);
+}
+static void fan_off(void)
+{
+    // ESP_LOGI(TAG, "Fan OFF");
+    FAN_OFF;
+    xSemaphoreTake(ware_Status_sem, portMAX_DELAY);
+    fpStatus.fan_status = false;
+
+    xSemaphoreGive(ware_Status_sem);
+    snprintf(p_sendData, sizeof(p_sendData),
+             "{\"id\":%d,\"fan\":%d, \"pump\":%d, \"led\":%d}",
+             node_id, fpStatus.fan_status, fpStatus.pump_status, fpStatus.led_status);
+    loraDataSendServer(p_sendData);
+}
+static void pump_on(void)
+{
+    // ESP_LOGI(TAG, "Pump ON");
+    PUMP_ON;
+    xSemaphoreTake(ware_Status_sem, portMAX_DELAY);
+    fpStatus.pump_status = true;
+
+    xSemaphoreGive(ware_Status_sem);
+    snprintf(p_sendData, sizeof(p_sendData),
+             "{\"id\":%d,\"fan\":%d, \"pump\":%d, \"led\":%d}",
+             node_id, fpStatus.fan_status, fpStatus.pump_status, fpStatus.led_status);
+    loraDataSendServer(p_sendData);
+}
+static void pump_off(void)
+{
+    // ESP_LOGI(TAG, "Pump OFF");
+    PUMP_OFF;
+    xSemaphoreTake(ware_Status_sem, portMAX_DELAY);
+    fpStatus.pump_status = false;
+
+    // snprintf(p_sendData, sizeof(p_sendData),
+    //                  "{[\"temp_th\":%d,\"light_th\":%d]}",
+    //                  thVal.tempTh, thVal.lightTh);
+    // loraDataSendServer(p_sendData);
+
+    xSemaphoreGive(ware_Status_sem);
+    snprintf(p_sendData, sizeof(p_sendData),
+             "{\"id\":%d,\"fan\":%d, \"pump\":%d, \"led\":%d}",
+             node_id, fpStatus.fan_status, fpStatus.pump_status, fpStatus.led_status);
+    loraDataSendServer(p_sendData);
+}
+static void light_on(void)
+{
+    LED_ON;
+    xSemaphoreTake(ware_Status_sem, portMAX_DELAY);
+    fpStatus.led_status = true;
+    xSemaphoreGive(ware_Status_sem);
+    snprintf(p_sendData, sizeof(p_sendData),
+             "{\"id\":%d,\"fan\":%d, \"pump\":%d, \"led\":%d}",
+             node_id, fpStatus.fan_status, fpStatus.pump_status, fpStatus.led_status);
+    loraDataSendServer(p_sendData);
+}
+static void light_off(void)
+{
+    LED_OFF;
+    xSemaphoreTake(ware_Status_sem, portMAX_DELAY);
+    fpStatus.led_status = false;
+    xSemaphoreGive(ware_Status_sem);
+    snprintf(p_sendData, sizeof(p_sendData),
+             "{\"id\":%d,\"fan\":%d, \"pump\":%d, \"led\":%d}",
+             node_id, fpStatus.fan_status, fpStatus.pump_status, fpStatus.led_status);
+    loraDataSendServer(p_sendData);
+}
 typedef struct
 {
     uint16_t len;
@@ -105,9 +184,31 @@ void nvsReadNodeIdInit(void)
         node_table[i].used = true;
     }
 #else
+    // write_nvs_u8(NVS_NODEID_NAMESPACE, NVS_NODEID_KEY, 0);
     node_id = read_nvs_u8(NVS_NODEID_NAMESPACE, NVS_NODEID_KEY);
     ESP_LOGI(TAG, "Node ID: %d", node_id);
     snprintf(nodeIdName, sizeof(nodeIdName), "%d", node_id);
+    thVal.tempTh = read_Data_Threshold(NODE_TEMP_KEY);
+    if (thVal.tempTh == 0 || thVal.tempTh > 100)
+    {
+        thVal.tempTh = 30;
+        write_Data_Threshold(NODE_TEMP_KEY, thVal.tempTh);
+    }
+    thVal.humiTh = read_Data_Threshold(NODE_HUMI_KEY);
+    if (thVal.humiTh == 0 || thVal.humiTh > 100)
+    {
+        thVal.humiTh = 50;
+    }
+    thVal.lightTh = read_Data_Threshold(NODE_LIGHT_KEY);
+    if (thVal.lightTh == 0 || thVal.lightTh > 255)
+    {
+        thVal.lightTh = 50;
+    }
+    thVal.soilTh = read_Data_Threshold(NODE_SOIL_KEY);
+    if (thVal.soilTh == 0 || thVal.soilTh > 100)
+    {
+        thVal.soilTh = 20;
+    }
 #endif
 }
 
@@ -375,10 +476,25 @@ static void ServerDataClient(void *arg)
                     break;
                 }
             }
-            else
+            else if (frame.data[0] == '{')
             {
-                printf("lora data:%s\n", frame.data);
-                pubData((char *)frame.data);
+                // printf("lora data:%s\n", frame.data);
+                // uint8_t sendData[8];
+                // sendData[0] = CMD_REQUEST;//D0:CF:13:16:30:F4
+                // sendData[1] = 0XE8;
+                // sendData[2] = 0XF6;
+                // sendData[3] = 0X0A;
+                // sendData[4] = 0X8A;
+                // sendData[5] = 0XE2;
+                // sendData[6] = 0XAC;
+                // sendData[7] = 0XAA;
+                // lora_send(sendData, sizeof(sendData));
+                if (frame.data[1] == '[')
+                {
+                    printf("lora data:%s\n", frame.data);
+                }
+                else
+                    pubData((char *)frame.data);
             }
         }
     }
@@ -401,16 +517,16 @@ void mqttSendDataLoraTask(void *pvParameters)
             if (fpStatus.thresholdStatus == true)
             {
                 snprintf(buf, sizeof(buf),
-                         "{\"node_id\":node_\"%d\",\"Key\":%s,\"val\":%d,\"action\":%s}",
+                         "{\"node_id\":\"node_%d\",\"Key\":%d,\"val\":%d,\"action\":\"%s\"}",
                          fpStatus.Id1,
-                         (char *)fpStatus.keyThreshold,
+                         fpStatus.keyNum,
                          fpStatus.valueThreshold,
                          "threshold");
             }
             else
             {
                 snprintf(buf, sizeof(buf),
-                         "{\"node_id\":node_\"%d\",\"fan\":%d,\"pump\":%d,\"LED\":%d,\"action\":%s}",
+                         "{\"node_id\":\"node_%d\",\"fan\":%d,\"pump\":%d,\"LED\":%d,\"action\":\"%s\"}",
                          fpStatus.Id1,
                          fpStatus.fan ? 1 : 0, // 转为 1 或 0
                          fpStatus.pump ? 1 : 0,
@@ -498,10 +614,6 @@ bool gateway_delete_node_by_id(uint8_t node_id)
             memset(&node_table[i], 0, sizeof(node_entry_t));
             return true;
         }
-        else
-        {
-            ESP_LOGI(TAG, "Node ID=%d not found", node_id);
-        }
     }
     return false;
 }
@@ -509,15 +621,40 @@ bool gateway_delete_node_by_id(uint8_t node_id)
 /*************************Server code end************************ */
 
 /*************************Node*********************************** */
+#define TEMP_HIGH_ON 30.0f  // 开启阈值
+#define TEMP_HIGH_OFF 28.0f // 关闭阈值（更低）
+#define SOIL_DRY_ON 30.0f
+#define SOIL_DRY_OFF 40.0f
+static system_ctrl_t sys_ctrl = {MODE_AUTO, MODE_AUTO, 0, 0};
 /**
  * @brief  网关解析节点上报的JSON数据
  */
 void loraDataSendServer(const char *data)
 {
     lora_send((uint8_t *)data, strlen(data));
-    ESP_LOGI(TAG, "send data:%s", data);
+    // ESP_LOGI(TAG, "send data:%s", data);
 }
-
+void remote_manual_control(int device_type, bool turn_on)
+{
+    if (device_type == DEVICE_FAN)
+    {
+        sys_ctrl.fan_mode = MODE_MANUAL;
+        sys_ctrl.fan_manual_start_tick = xTaskGetTickCount();
+        if (turn_on)
+            fan_on();
+        else
+            fan_off();
+    }
+    else if (device_type == DEVICE_PUMP)
+    {
+        sys_ctrl.pump_mode = MODE_MANUAL;
+        sys_ctrl.pump_manual_start_tick = xTaskGetTickCount();
+        if (turn_on)
+            pump_on();
+        else
+            pump_off();
+    }
+}
 static void loraDataClient(void *arg)
 {
     lora_frame_t frame; // 解析数据
@@ -537,6 +674,7 @@ static void loraDataClient(void *arg)
                     {
                         if (macId[i] != frame.data[i + 1])
                         {
+
                             ESP_LOGW(TAG, "MAC not match");
                             isAssignStatus = false;
                             break;
@@ -557,7 +695,7 @@ static void loraDataClient(void *arg)
                     }
                     break;
 
-                case CMD_DISCOVER_NODE: // 请求 ID  0xaa
+                case CMD_DISCOVER_NODE: // 请求 ID  0x77
                 {
                     ESP_LOGI(TAG, "CMD_DISCOVER_NODE");
                     if (node_id == 0)
@@ -574,6 +712,12 @@ static void loraDataClient(void *arg)
                 case 0x99: // 心跳 / 校验
                 {
                     uint8_t ack_Status = 0;
+                    LED_ON;
+                    uint8_t sendData[8] = {
+                        CMD_ID_ACK, // 0x66
+                        macId[0], macId[1], macId[2],
+                        macId[3], macId[4], macId[5], CMD_END};
+                    lora_send(sendData, sizeof(sendData));
                     ESP_LOGI(TAG, "CMD_HEARTBEAT");
                     for (uint8_t i = 0; i < 6; i++)
                     {
@@ -598,6 +742,12 @@ static void loraDataClient(void *arg)
                 {
                     ESP_LOGI(TAG, "CMD_REQUEST");
                     bool isExist = true;
+                    //LED_OFF;
+                    // uint8_t sendData[8] = {
+                    //     CMD_ID_ACK, // 0x66
+                    //     macId[0], macId[1], macId[2],
+                    //     macId[3], macId[4], macId[5], CMD_END};
+                    // lora_send(sendData, sizeof(sendData));
                     for (uint8_t i = 0; i < 6; i++)
                     {
                         if (macId[i] != frame.data[i + 1])
@@ -627,13 +777,20 @@ static void loraDataClient(void *arg)
             }
             else if (frame.data[0] == '{')
             {
-                ESP_LOGI(TAG, "JSON: %s", frame.data);
                 cJSON *root = cJSON_Parse((const char *)frame.data);
                 if (root == NULL)
                 {
                     ESP_LOGE(TAG, "cJSON_Parse error");
+                    ESP_LOGI(TAG, "JSON: %s", frame.data);
                     continue;
                 }
+                // ESP_LOGI(TAG, "JSON: %s", frame.data);
+                cJSON *nodeid10086 = cJSON_GetObjectItem(root, "id"); // 格式
+                if (nodeid10086 != NULL)
+                {
+                    continue;
+                }
+                ESP_LOGI(TAG, "JSON: %s", frame.data);
                 cJSON *nodeid0 = cJSON_GetObjectItem(root, "node_id"); // 格式
                 if (nodeid0 == NULL)
                 {
@@ -645,27 +802,31 @@ static void loraDataClient(void *arg)
                     // 比较节点ID字符串是否一致
                     if (strcmp(nodeid0->valuestring, nodeIdName) == 0)
                     {
-                        ESP_LOGI(TAG, "nodeIdName:%s", nodeIdName);
+                        ESP_LOGI(TAG, "nodeIdName:%s, nodeid0->valuestring:%s", nodeIdName, nodeid0->valuestring);
                         if (strcmp(cJSON_GetObjectItem(root, "action")->valuestring, "threshold") == 0)
                         {
-                            char *KeyTh = cJSON_GetObjectItem(root, "Key")->valuestring;
+                            uint16_t KEY_NUM = cJSON_GetObjectItem(root, "Key")->valueint;
                             uint16_t ValueTh = cJSON_GetObjectItem(root, "val")->valueint;
-                            if (strcmp(KeyTh, "temp") == 0)
+                            if (KEY_NUM == 11)
                             {
                                 thVal.tempTh = ValueTh;
                                 write_Data_Threshold(NODE_TEMP_KEY, thVal.tempTh);
                             }
-                            else if (strcmp(KeyTh, "humi") == 0)
+                            else if (KEY_NUM == 22)
                             {
                                 thVal.humiTh = ValueTh;
                                 write_Data_Threshold(NODE_HUMI_KEY, thVal.humiTh);
                             }
-                            else if (strcmp(KeyTh, "light") == 0)
+                            else if (KEY_NUM == 33)
                             {
                                 thVal.lightTh = ValueTh;
                                 write_Data_Threshold(NODE_LIGHT_KEY, thVal.lightTh);
+                                char sendBuf[64];
+                                snprintf(sendBuf, sizeof(sendBuf),
+                                         "{[\"temp_th\":%d,\"light\":%d]}", thVal.tempTh, thVal.lightTh);
+                                loraDataSendServer(sendBuf);
                             }
-                            else if (strcmp(KeyTh, "soil") == 0)
+                            else if (KEY_NUM == 44)
                             {
                                 thVal.soilTh = ValueTh;
                                 write_Data_Threshold(NODE_SOIL_KEY, thVal.soilTh);
@@ -673,7 +834,9 @@ static void loraDataClient(void *arg)
                         }
                         else if (strcmp(cJSON_GetObjectItem(root, "action")->valuestring, "control") == 0)
                         {
+                            ESP_LOGI(TAG, "control");
                             cJSON *fanStatus = cJSON_GetObjectItem(root, "fan");
+                            ESP_LOGI(TAG, "fan status: %d", fanStatus->valueint);
                             if (fanStatus == NULL)
                             {
                                 ESP_LOGE(TAG, "fan error");
@@ -683,12 +846,13 @@ static void loraDataClient(void *arg)
                                 if (fanStatus->valueint == 1)
                                 {
                                     // FAN_ON;
-                                    fan_on_high();
+                                    remote_manual_control(DEVICE_FAN, 1);
                                 }
                                 else
                                 {
                                     // FAN_OFF;
-                                    fan_off();
+                                    // fan_off();
+                                    remote_manual_control(DEVICE_FAN, 0);
                                 }
                             }
                             cJSON *pumpStatus = cJSON_GetObjectItem(root, "pump");
@@ -700,16 +864,18 @@ static void loraDataClient(void *arg)
                             {
                                 if (pumpStatus->valueint == 1)
                                 {
-                                    pump_on();
+                                    // pump_on();
+                                    remote_manual_control(DEVICE_PUMP, 1);
                                     // PUMP_ON;
                                 }
                                 else
                                 {
                                     // PUMP_OFF;
-                                    pump_off();
+                                    // pump_off();
+                                    remote_manual_control(DEVICE_PUMP, 0);
                                 }
                             }
-                            cJSON *lightStatus = cJSON_GetObjectItem(root, "light");
+                            cJSON *lightStatus = cJSON_GetObjectItem(root, "LED");
                             if (lightStatus == NULL)
                             {
                                 ESP_LOGE(TAG, "light error");
@@ -719,15 +885,19 @@ static void loraDataClient(void *arg)
                                 if (lightStatus->valueint == 1)
                                 {
                                     light_on();
+                                    light_flag = 1;
                                 }
                                 else
                                 {
                                     light_off();
+                                    light_flag = 0;
                                 }
                             }
                         }
                     }
                 }
+                else
+                    ESP_LOGI(TAG, "error");
                 cJSON_Delete(root);
             }
         }
@@ -752,7 +922,7 @@ void lora_task(void *pvParameters)
             // 事件类型：接收到数据（最核心的事件）
             case UART_DATA:
                 // 打印接收到的数据长度
-                ESP_LOGI(TAG, "[UART DATA LEN]: %d", event.size);
+                // ESP_LOGI(TAG, "[UART DATA LEN]: %d", event.size);
                 // 从串口读取指定长度的数据到缓冲区，portMAX_DELAY表示阻塞等待直到读取完成
                 int len = uart_read_bytes(USER_UART_NUM,
                                           uart_buffer,
@@ -764,8 +934,8 @@ void lora_task(void *pvParameters)
                     break;
                 }
                 // 打印接收到的数据
-                ESP_LOGI(TAG, "[UART DATA[0]]: %u", uart_buffer[0]);
-                ESP_LOG_BUFFER_HEX(TAG, uart_buffer, len);
+                // ESP_LOGI(TAG, "[UART DATA[0]]: %u", uart_buffer[0]);
+                // ESP_LOG_BUFFER_HEX(TAG, uart_buffer, len);
                 for (int i = 0; i < len; i++)
                 {
                     uint8_t c = uart_buffer[i];
@@ -783,7 +953,7 @@ void lora_task(void *pvParameters)
                             frame.len = frame_len;
                             memcpy(frame.data, frame_buf, frame_len);
                             // 打印完整帧（方便调试）
-                            ESP_LOGI(TAG, "Complete frame: %.*s", frame_len, frame.data);
+                            // ESP_LOGI(TAG, "Complete frame: %.*s", frame_len, frame.data);
                             // 发送到队列（非阻塞）
                             if (xQueueSend(lora_frame_queue, &frame, 0) != pdPASS)
                             {
@@ -794,7 +964,7 @@ void lora_task(void *pvParameters)
                         frame_len = 0;
                     }
                 }
-                ESP_LOGI(TAG, "[DATA]: %s", uart_buffer);
+                // ESP_LOGI(TAG, "[DATA]: %s", uart_buffer);
                 memset(uart_buffer, 0, sizeof(uart_buffer));
                 break;
 
@@ -845,244 +1015,384 @@ void lora_task(void *pvParameters)
 }
 static void linear_buf_add(linear_buf_t *b, float v)
 {
-    b->buf[b->idx++] = v;
-    if (b->idx >= PREDICT_WIN_SIZE)
-    {
-        b->idx = 0;
-    }
+    b->buf[b->idx] = v;
+    b->idx = (b->idx + 1) % PREDICT_WIN_SIZE;
+
     if (b->count < PREDICT_WIN_SIZE)
     {
         b->count++;
     }
 }
-// 控制逻辑函数
-static bool linear_predict_ex(linear_buf_t *b, predict_result_t *out)
+
+// ================== 卡尔曼滤波 ==================
+static float kalman_update(kalman_t *k, float measurement)
 {
-    if (b->count < 4)
-        return false;
+    k->p = k->p + k->q;
 
-    float sum_x = 0, sum_y = 0;
-    float sum_xy = 0, sum_x2 = 0;
+    float K = k->p / (k->p + k->r);
 
-    for (int i = 0; i < b->count; i++)
+    k->x = k->x + K * (measurement - k->x);
+
+    k->p = (1 - K) * k->p;
+
+    return k->x;
+}
+// 控制逻辑函数
+// ================== 线性预测（已修复顺序） ==================
+// ================== EWMA趋势预测 ==================
+static bool ewma_predict_update(ewma_predict_t *e, float input, predict_result_t *out)
+{
+    // 1. 强制初始化：确保从真实测量的温度开始，而不是从0开始
+    if (e->init_stage == 0)
     {
-        float x = i;
-        float y = b->buf[i];
-        sum_x += x;
-        sum_y += y;
-        sum_xy += x * y;
-        sum_x2 += x * x;
+        e->value = input;
+        e->trend = 0.0f;
+        e->init_stage = 1;
+        return false;
     }
 
-    float n = b->count;
-    float k = (n * sum_xy - sum_x * sum_y) /
-              (n * sum_x2 - sum_x * sum_x);
-    float b0 = (sum_y - k * sum_x) / n;
+    float last_level = e->value;
 
-    float future_x = (float)PREDICT_TIME_S / SAMPLE_INTERVAL_S;
+    // 2. 更新水平值 (简单 EWMA 即可，或者保持你的公式但确保参数正确)
+    // 修正：先计算 Level，再根据 Level 的变化计算 Trend
+    e->value = e->alpha * input + (1.0f - e->alpha) * (e->value + e->trend);
 
-    out->predict = k * future_x + b0;
-    out->slope = k;
+    // 3. 更新斜率 (Slope/Trend)
+    float current_slope = e->value - last_level;
+    e->trend = e->beta * current_slope + (1.0f - e->beta) * e->trend;
+
+    // 4. 计算未来预测 (30秒后)
+    // 这里的 6.0f 是 PREDICT_TIME_S / SAMPLE_INTERVAL_S
+    float future_steps = 6.0f;
+    float predict = e->value + e->trend * future_steps;
+
+    out->predict = predict;
+    out->slope = e->trend;
 
     return true;
 }
 static float calc_thi(float temp, float humi)
 {
-    return temp + 0.36f * humi;
+    // 更合理的THI计算
+    return temp - (0.55f - 0.0055f * humi) * (temp - 14.5f);
 }
+float convert_to_percentage(uint16_t input_value)
+{
+    // 1. 边界值校验（防止输入超出合理范围）
+    if (input_value < 0)
+    {
+        // printf("错误：输入值超出范围（0~%d）\n", PEAK_VALUE);
+        return -1.0f; // 返回异常值
+    }
 
+    // 2. 核心转换计算（反向线性映射）
+    float percentage = MAX_PERCENT * (1.0f - (float)input_value / PEAK_VALUE);
+
+    // 3. 精度处理（保留2位小数，可选）
+    percentage = (float)((int)(percentage * 100 + 0.5)) / 100;
+    if (input_value > PEAK_VALUE)
+    {
+        percentage = 0.0f;
+    }
+    return percentage;
+}
+static kalman_t temp_kf = {.x = 25, .p = 1, .q = 0.01, .r = 0.5};
+static kalman_t humi_kf = {.x = 50, .p = 1, .q = 0.02, .r = 1};
+static kalman_t soil_kf = {.x = 50, .p = 1, .q = 0.05, .r = 3};
+static ewma_predict_t temp_ewma = {.alpha = 0.3f, .beta = 0.3f, .init_stage = 0};
+static ewma_predict_t soil_ewma = {.alpha = 0.2f, .beta = 0.05f, .init_stage = 0};
+static ewma_predict_t thi_ewma = {.alpha = 0.3f, .beta = 0.1f, .init_stage = 0};
 // 采集数据任务
 void data_task(void *pvParameters)
 {
-    uint16_t soil, light;
+    uint16_t soil_raw, light;
     int temp_data = 100, humi_data = 100;
     char sendBuf[128];
-    thVal.tempTh = read_Data_Threshold(NODE_TEMP_KEY);
-    if (thVal.tempTh == 0)
-    {
-        thVal.tempTh = 320;
-        write_Data_Threshold(NODE_TEMP_KEY, thVal.tempTh);
-    }
-    thVal.humiTh = read_Data_Threshold(NODE_HUMI_KEY);
-    if (thVal.humiTh == 0)
-    {
-        thVal.humiTh = 50;
-        write_Data_Threshold(NODE_HUMI_KEY, thVal.humiTh);
-    }
-    thVal.soilTh = read_Data_Threshold(NODE_SOIL_KEY);
-    if (thVal.soilTh == 0)
-    {
-        thVal.soilTh = 350;
-        write_Data_Threshold(NODE_SOIL_KEY, thVal.soilTh);
-    }
-    static linear_buf_t temp_buf = {0};
-    static linear_buf_t soil_buf = {0};
-    static linear_buf_t thi_buf = {0};
-    // ESP_LOGI(TAG, "mac:%s", (char *)macId);
-    // ESP_LOG_BUFFER_HEX(TAG, macId, 6);
 
-    float thi = 0;
-    float temp;
-    float humi;
-    float temp_pred, soil_pred;
-    predict_result_t thi_pred;
+    float temp, humi, soil, thi;
+    predict_result_t temp_pred, soil_pred, thi_pred;
+
+    static bool temp_high_flag = false;
+    static bool soil_dry_flag = false;
+    static uint8_t light_count_on = 0;
+    static uint8_t light_count_off = 0;
+    static FPStatus_t SendStatus;
+    int last_light_flag = -1; // 记录上一次的状态，初始设为-1确保第一次运行能触发
+                              // ESP_LOGI("main", "siol: %d",thVal.soilTh);
     while (1)
     {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        // ===== 采集 =====
         light = bh1750_read_data() / 1.2;
-        soil = adc_continuous_read_data();
-        DHT11_StartGet(&temp_data, &humi_data);
-        temp = temp_data / 10.0;
-        humi = humi_data / 1.0;
-        // 打印
-        // printf("temp:%f humi:%f soil:%d light:%d\n", temp, humi, soil, light);
-        // 拼 CSV 字符串
-        if (node_id != 0)
+
+        // --- 1. 逻辑判断与滤波 ---
+        if (light < thVal.lightTh)
         {
-            snprintf(sendBuf, sizeof(sendBuf),
-                     "{\"id\":%d,\"temp\":%.2f,\"humi\":%.2f,\"light\":%d,\"soil\":%d,\"fan\":%d,\"pump\":%d,\"LED\":%d}",
-                     node_id,
-                     temp,
-                     humi,
-                     light,
-                     soil,
-                     fpStatus.fan_status,
-                     fpStatus.pump_status,
-                     fpStatus.led_status);
-            loraDataSendServer(sendBuf); // 发送数据
+            if (light_flag == 0)
+            {
+                light_count_on++;
+            }
+            if (light_count_on > 2)
+            {
+                light_flag = 1;
+                light_count_on = 0;
+                light_count_off = 0; // 切换时重置计数器
+            }
         }
-        linear_buf_add(&temp_buf, temp);
-        linear_buf_add(&soil_buf, soil / 1.0);
-        thi = calc_thi(temp, humi);
-        linear_buf_add(&thi_buf, thi);
-        if (linear_predict_ex(&thi_buf, &thi_pred))
+
+        // 使用 +5 这里的迟滞处理很好，能防止数据在阈值边缘抖动
+        if (light > thVal.lightTh + 5)
         {
-            if (thi_pred.slope > THI_SLOPE_MIN && thi_pred.predict > crop->thi_high)
+            if (light_flag == 1)
+            {
+                light_count_off++;
+            }
+            if (light_count_off > 2)
+            {
+                light_flag = 0;
+                light_count_off = 0;
+                light_count_on = 0; // 切换时重置计数器
+            }
+        }
+
+        // --- 2. 状态变化检测 (关键优化点) ---
+        if (light_flag != last_light_flag)
+        {
+            if (light_flag == 1)
+            {
+                light_on(); // 仅在 flag 从 0 变 1 时执行一次
+            }
+            else
+            {
+                light_off(); // 仅在 flag 从 1 变 0 时执行一次
+            }
+
+            last_light_flag = light_flag; // 更新旧状态标记
+        }
+        soil_raw = adc_continuous_read_data();
+        DHT11_StartGet(&temp_data, &humi_data);
+
+        temp = temp_data / 10.0f;
+        humi = humi_data;
+
+        // ===== 转换 =====
+        soil = convert_to_percentage(soil_raw);
+
+        // ===== 滤波 =====
+        temp = kalman_update(&temp_kf, temp);
+        humi = kalman_update(&humi_kf, humi);
+        soil = kalman_update(&soil_kf, soil);
+        // ESP_LOGI(TAG, "Temp: %.2f, Humi: %.2f, Soil: %.2f", temp, humi, soil);
+        //  ===== THI =====
+        thi = calc_thi(temp, humi);
+
+        // ===== 滞回控制（温度）=====
+        if (!temp_high_flag && temp > thVal.tempTh)
+        {
+            xEventGroupSetBits(env_event_group, EVT_TEMP_HIGH);
+            xEventGroupClearBits(env_event_group, EVT_TEMP_NORMAL);
+            temp_high_flag = true;
+        }
+        else if (temp_high_flag && temp < thVal.tempTh - 3   )
+        {
+            xEventGroupSetBits(env_event_group, EVT_TEMP_NORMAL);
+            xEventGroupClearBits(env_event_group, EVT_TEMP_HIGH);
+            temp_high_flag = false;
+        }
+
+        if (ewma_predict_update(&temp_ewma, temp, &temp_pred))
+        {
+            if (temp_pred.predict > thVal.tempTh && temp_pred.slope > 0.001f)
+            {
+                xEventGroupSetBits(env_event_group, EVT_TEMP_WILL_HIGH);
+                if (sys_ctrl.fan_mode == MODE_AUTO && temp_pred.predict > thVal.tempTh)
+                {
+                    fan_on();
+                }
+            }
+            else if (temp_pred.predict < thVal.tempTh - 4 && temp_pred.slope < -0.001f)
+            {
+                xEventGroupClearBits(env_event_group, EVT_TEMP_WILL_HIGH);
+            }
+
+            // ESP_LOGI("main", "temp_pred.predict: %f, temp_pred.slope: %f", temp_pred.predict, temp_pred.slope);
+        }
+
+        // 土壤预判：预测过干 且 趋势向下 (slope < 0)
+        if (ewma_predict_update(&soil_ewma, soil, &soil_pred))
+        {
+            if (soil_pred.predict < thVal.soilTh && soil_pred.slope < -0.1f)
+            {
+                xEventGroupSetBits(env_event_group, EVT_SOIL_WILL_DRY);
+                // ESP_LOGI("main", "6666666666");
+            }
+            else if (soil_pred.predict > thVal.soilTh + 10)
+            {
+                xEventGroupClearBits(env_event_group, EVT_SOIL_WILL_DRY);
+                // ESP_LOGI("main", "555555555");
+            }
+            // ESP_LOGI("main", "soil_pred.predict: %f, soil_pred.slope: %f", soil_pred.predict, soil_pred.slope);
+        }
+
+        // 环境指数综合预判
+        if (ewma_predict_update(&thi_ewma, thi, &thi_pred))
+        {
+            // 如果 THI 预测值超过作物耐受极限 且 正在恶化
+            if (thi_pred.predict > crop->thi_high)
             {
                 xEventGroupSetBits(env_event_group, EVT_ENV_WILL_BAD);
-                ESP_LOGI(TAG, "will bad, slope:%f predict:%f", thi_pred.slope, thi_pred.predict);
             }
             else
             {
                 xEventGroupClearBits(env_event_group, EVT_ENV_WILL_BAD);
             }
-            /* 温度预测 */
-            if (linear_predict_ex(&temp_buf, &temp_pred))
-            {
-                ESP_LOGI(TAG, "Temp predict = %.1f", temp_pred);
-
-                if (temp_pred > thVal.tempTh / 10.0)
-                {
-                    xEventGroupSetBits(env_event_group, EVT_TEMP_WILL_HIGH);
-                }
-                else
-                {
-                    xEventGroupClearBits(env_event_group, EVT_TEMP_WILL_HIGH);
-                }
-            }
-
-            /* 土壤预测 */
-            if (linear_predict_ex(&soil_buf, &soil_pred))
-            {
-                ESP_LOGI(TAG, "Soil predict = %.1f", soil_pred);
-
-                if (soil_pred < thVal.soilTh / 10.0)
-                {
-                    xEventGroupSetBits(env_event_group, EVT_SOIL_WILL_DRY);
-                }
-                else
-                {
-                    xEventGroupClearBits(env_event_group, EVT_SOIL_WILL_DRY);
-                }
-            }
-            vTaskDelay(pdMS_TO_TICKS(5000));
         }
-        // ESP_LOGI(TAG, "send data:%s", sendBuf);
-        vTaskDelay(pdMS_TO_TICKS(10000));
+
+        // ===== 上报 =====
+        if (node_id != 0)
+        {
+            xSemaphoreTake(ware_Status_sem, portMAX_DELAY);
+            SendStatus.fan_status = fpStatus.fan_status;
+            SendStatus.pump_status = fpStatus.pump_status;
+            SendStatus.led_status = fpStatus.led_status;
+            xSemaphoreGive(ware_Status_sem);
+            snprintf(sendBuf, sizeof(sendBuf),
+                     "{\"id\":%d,\"temp\":%.2f,\"humi\":%.2f,\"light\":%d,\"soil\":%.2f,\"fan\":%d, \"pump\":%d, \"led\":%d}",
+                     node_id, temp, humi, light, soil,
+                     SendStatus.fan_status, SendStatus.pump_status, SendStatus.led_status);
+            loraDataSendServer(sendBuf);
+        }
+        //  vTaskDelay(pdMS_TO_TICKS(5000));
+        // printf("Temp Slope: %f, Predict: %f\n", temp_pred.slope, temp_pred.predict);
     }
 }
-
 // 控制逻辑函数
 void control_task(void *pvParameters)
 {
+    system_state_t state = STATE_IDLE;
+
     while (1)
     {
-        system_state_t state = STATE_IDLE;
-        EventBits_t bits;
+        // 1. 获取事件位 (不阻塞太久，方便处理手动恢复逻辑)
+        EventBits_t current_bits = xEventGroupGetBits(env_event_group);
+        uint32_t now = xTaskGetTickCount();
 
-        while (1)
+        // 2. 检查手动模式是否超时，超时则切回自动
+        if (sys_ctrl.fan_mode == MODE_MANUAL &&
+            (now - sys_ctrl.fan_manual_start_tick) > pdMS_TO_TICKS(MANUAL_TIMEOUT_MS))
         {
-            bits = xEventGroupWaitBits(
-                env_event_group,
-                EVT_TEMP_HIGH | EVT_TEMP_NORMAL |
-                    EVT_SOIL_DRY | EVT_SOIL_OK,
-                pdFALSE,
-                pdFALSE,
-                portMAX_DELAY);
-
-            switch (state)
+            sys_ctrl.fan_mode = MODE_AUTO;
+        }
+        if (sys_ctrl.pump_mode == MODE_MANUAL &&
+            (now - sys_ctrl.pump_manual_start_tick) > pdMS_TO_TICKS(MANUAL_TIMEOUT_MS))
+        {
+            sys_ctrl.pump_mode = MODE_AUTO;
+        }
+        if (current_bits & EVT_ENV_WILL_BAD)
+        {
+            if (sys_ctrl.fan_mode == MODE_AUTO)
             {
+                fan_on();
+                state = STATE_PREDICT_COOLING;
+            }
+        }
+        // 3. 状态机逻辑
+        switch (state)
+        {
+        case STATE_IDLE:
+            // 只有在自动模式下，才允许预测逻辑改变状态
+            if (sys_ctrl.fan_mode == MODE_AUTO && (current_bits & EVT_TEMP_WILL_HIGH))
+            {
+                fan_on();
+                state = STATE_PREDICT_COOLING;
+            }
+            if (sys_ctrl.pump_mode == MODE_AUTO && (current_bits & EVT_SOIL_WILL_DRY))
+            {
+                pump_on();
+                state = STATE_PREDICT_WATERING;
+            }
+            // 逻辑 B：已经高温了，必须立即处理（补漏逻辑）
+            // else if (sys_ctrl.fan_mode == MODE_AUTO && (current_bits & EVT_TEMP_HIGH)) {
+            //      fan_on();
+            // }
+            // ESP_LOGI(TAG, "STATE_IDLE");
+            break;
 
-            case STATE_IDLE:
-                if (bits & EVT_TEMP_WILL_HIGH)
-                {
-                    fan_on_low(); // 低速预通风
-                    state = STATE_PREDICT_COOLING;
-                }
-                else if (bits & EVT_SOIL_WILL_DRY)
-                {
-                    pump_on_pulse(); // 脉冲灌溉
-                    state = STATE_PREDICT_WATERING;
-                }
-                break;
-            case STATE_PREDICT_COOLING:
-                if (bits & EVT_TEMP_HIGH)
-                {
-                    fan_on_high();
-                    state = STATE_COOLING;
-                }
-                else if (bits & EVT_TEMP_NORMAL)
-                {
-                    fan_off();
-                    state = STATE_IDLE;
-                }
-                break;
-            case STATE_COOLING:
-                if (bits & EVT_TEMP_NORMAL)
-                {
-                    fan_off();
-                    state = STATE_IDLE;
-                }
-                break;
-            case STATE_PREDICT_WATERING:
-                if (bits & EVT_SOIL_DRY)
-                {
-                    pump_on();
-                    state = STATE_WATERING;
-                }
-                else if (bits & EVT_SOIL_OK)
-                {
-                    pump_off();
-                    state = STATE_IDLE;
-                }
-                break;
-            case STATE_WATERING:
-                if (bits & EVT_SOIL_OK)
-                {
-                    pump_off();
-                    state = STATE_IDLE;
-                }
-                break;
-
-            default:
+        case STATE_PREDICT_COOLING:
+            // 如果切到了手动模式，强制退出当前自动状态机流程
+            if (sys_ctrl.fan_mode == MODE_MANUAL)
+            {
                 state = STATE_IDLE;
                 break;
             }
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 延时1秒
-    }
-}
 
-/*************************Node code end************************************** */
+            if (current_bits & EVT_TEMP_HIGH)
+            {
+                //fan_on(); // 维持开启状态，进入正式降温阶段
+                state = STATE_COOLING;
+            }
+            else if ((current_bits & EVT_TEMP_NORMAL) || !(current_bits & EVT_TEMP_WILL_HIGH))
+            {
+                fan_off();
+                state = STATE_IDLE;
+            }
+            break;
+
+        case STATE_COOLING:
+            if (sys_ctrl.fan_mode == MODE_MANUAL)
+            {
+                state = STATE_IDLE;
+                break;
+            }
+
+            if (current_bits & EVT_TEMP_NORMAL)
+            {
+                fan_off();
+                state = STATE_IDLE;
+            }
+
+            break;
+
+        case STATE_PREDICT_WATERING:
+            if (sys_ctrl.pump_mode == MODE_MANUAL)
+            {
+                state = STATE_IDLE;
+                break;
+            }
+
+            if (current_bits & EVT_SOIL_DRY)
+            {
+                pump_on();
+                state = STATE_WATERING;
+            }
+            else if ((current_bits & EVT_SOIL_OK) || !(current_bits & EVT_SOIL_WILL_DRY))
+            {
+                pump_off();
+                state = STATE_IDLE;
+            }
+            break;
+
+        case STATE_WATERING:
+            if (sys_ctrl.pump_mode == MODE_MANUAL)
+            {
+                state = STATE_IDLE;
+                break;
+            }
+
+            if (current_bits & EVT_SOIL_OK)
+            {
+                pump_off();
+                state = STATE_IDLE;
+            }
+            break;
+
+        default:
+            state = STATE_IDLE;
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+} /*************************Node code end************************************** */
 
 void init_hwrdware(void)
 {
@@ -1145,7 +1455,7 @@ void task_main(void)
     }
     ret = xTaskCreate(control_task,
                       "control_task",
-                      4096,
+                      8192,
                       NULL,
                       6,
                       NULL);
@@ -1155,6 +1465,7 @@ void task_main(void)
     }
     ret = xTaskCreate(loraDataClient, "loraDataClient",
                       8192, NULL, 9, NULL);
+    ware_Status_sem = xSemaphoreCreateMutex();
 #else // 创建mqtt接收数据任务
     gateway_event_group = xEventGroupCreate();
     if (gateway_event_group == NULL)
@@ -1216,4 +1527,5 @@ void app_main(void)
     // bh1750_main();
     // dht11_main();
     // ts_main();
+    // gpio_main_test();
 }

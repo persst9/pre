@@ -76,12 +76,12 @@ void parse_greenhouse_data(const char *json_str)
         else if (sendHeard->valuestring != NULL && strcmp(sendHeard->valuestring, "deleteNode") == 0)
         {
             cJSON *nodeId = cJSON_GetObjectItem(root, "nodeId");
-            if (cJSON_IsString(nodeId) && (nodeId->valuestring != NULL))
+            ESP_LOGI(TAG, "received deleteNode command");
+            uint8_t nodeIdValue = nodeId->valueint;
+            ESP_LOGI(TAG, "nodeId: %d", nodeIdValue);
+            if (gateway_delete_node_by_id(nodeIdValue))
             {
-                if (gateway_delete_node_by_id((uint8_t *)nodeId->valuestring))
-                {
-                    ESP_LOGI(TAG, "delete node success");
-                }
+                ESP_LOGI(TAG, "delete node success");
             }
         }
         else if (sendHeard->valuestring != NULL && strcmp(sendHeard->valuestring, "Control") == 0)
@@ -100,9 +100,23 @@ void parse_greenhouse_data(const char *json_str)
         else if (sendHeard->valuestring != NULL && strcmp(sendHeard->valuestring, "threshold") == 0)
         {
             ESP_LOGI(TAG, "receive threshold");
+            uint16_t keynum_t = 0;
+            if(strcmp(cJSON_GetObjectItem(root, "key")->valuestring, "temp") == 0) 
+            {
+                keynum_t = 11;
+            }else if(strcmp(cJSON_GetObjectItem(root, "key")->valuestring, "humi") == 0)
+            {
+                keynum_t = 22;
+            }else if(strcmp(cJSON_GetObjectItem(root, "key")->valuestring, "light") == 0)
+            {
+                keynum_t = 33;
+            }else if(strcmp(cJSON_GetObjectItem(root, "key")->valuestring, "soil") == 0)
+            {
+                keynum_t = 44;
+            }
             nodeFP_t nodeDataT = {
-                .Id1 = (uint8_t)cJSON_GetObjectItem(root, "nodeId")->valueint,
-                .keyThreshold = (char *)cJSON_GetObjectItem(root, "key")->valuestring,
+                .Id1 = (uint8_t)cJSON_GetObjectItem(root, "id")->valueint,
+                .keyNum = keynum_t,
                 .valueThreshold = (uint16_t)cJSON_GetObjectItem(root, "value")->valueint,
                 .thresholdStatus = true
             };
@@ -209,8 +223,8 @@ static void aliot_mqtt_event_handler(void *event_handler_arg,
 
             free(received_data);
         }
-        ESP_LOGI(TAG, "TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        ESP_LOGI(TAG, "DATA=%.*s\r\n", event->data_len, event->data);
+        //ESP_LOGI(TAG, "TOPIC=%.*s\r\n", event->topic_len, event->topic);
+        //ESP_LOGI(TAG, "DATA=%.*s\r\n", event->data_len, event->data);
         break;
 
     case MQTT_EVENT_ERROR: // MQTT´íÎóÊÂ¼þ
@@ -285,11 +299,11 @@ void pubData(const char *data_buf)
                                 strlen(data_buf),
                                 0,
                                 0);
-        ESP_LOGI(TAG, "Publish success: %s", data_buf);
+        //ESP_LOGI(TAG, "Publish success: %s", data_buf);
     }
     else
     {
-        ESP_LOGW(TAG, "MQTT not connected");
+        //ESP_LOGW(TAG, "MQTT not connected");
     }
 }
 

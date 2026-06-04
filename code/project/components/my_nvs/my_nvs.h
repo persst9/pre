@@ -12,7 +12,7 @@
 #define NODE_TEMP_KEY       "temp"      //阈值
 #define NODE_HUMI_KEY       "humi"      //阈值
 #define NODE_LIGHT_KEY       "light"      //阈值
-#define NODE_SOIL_KEY       "soil"      //阈值
+#define NODE_SOIL_KEY       "soil"      //阈值 
 size_t read_nvs_str(const char* namespace,const char* key,char* value,int maxlen);
 esp_err_t write_nvs_str(const char* namespace,const char* key,const char* value);
 size_t read_nvs_blob(const char* namespace,const char* key,uint8_t *value,int maxlen);

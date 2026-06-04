@@ -21,6 +21,7 @@ void pubData(const char *data_buf);
 // 定义要传递的数据包
 typedef struct {
     char * keyThreshold; // 节点阈值
+    uint16_t keyNum;
     uint8_t Id1;
     uint16_t valueThreshold;
     bool fan;  // 风扇状态（1=开启，0=关闭）

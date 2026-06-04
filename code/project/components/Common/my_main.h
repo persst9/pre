@@ -49,8 +49,8 @@ typedef enum {
 
 #define TEMP_HIGH_TH   32.0
 #define TEMP_LOW_TH    30.0
-#define SOIL_DRY_TH    35.0
-#define SOIL_OK_TH     40.0
+#define SOIL_DRY_TH    20.0
+#define SOIL_OK_TH     35.0
 #define EVT_TEMP_HIGH    BIT0
 #define EVT_TEMP_NORMAL  BIT1
 
@@ -62,7 +62,7 @@ typedef enum {
 extern EventGroupHandle_t env_event_group;
 #define PREDICT_WIN_SIZE   6   // 最近6次
 #define SAMPLE_INTERVAL_S  5   // 5秒一次
-#define PREDICT_TIME_S     300 // 预测5分钟后
+#define PREDICT_TIME_S     60 // 预测5分钟后
 #define TEMP_SLOPE_MIN   0.02f   // 每采样周期最小变化
 #define SOIL_SLOPE_MIN   0.01f
 #define THI_SLOPE_MIN  0.03f
@@ -107,5 +107,38 @@ typedef struct {
     bool pump_status;
     bool led_status;
 }FPStatus_t;
+typedef struct {
+    float x;   // 估计值
+    float p;   // 估计误差
+    float q;   // 过程噪声
+    float r;   // 测量噪声
+} kalman_t;
+typedef struct
+{
+    float value;
+    float last;
+    float alpha;
+    bool initialized;
+    float trend;        // 平滑后的趋势 (斜率)
+    uint8_t init_stage; // 0:未初始化, 1:仅有初始值, 2:进入正常追踪
+    float beta;// 趋势平滑系数 (0~1) - 建议设为 alpha 的 1/2 或 1/3
+} ewma_predict_t;
 
+typedef enum {
+    MODE_AUTO = 0,
+    MODE_MANUAL = 1
+} control_mode_t;
+
+typedef struct {
+    control_mode_t fan_mode;
+    control_mode_t pump_mode;
+    uint32_t fan_manual_start_tick;   // 记录手动开始时间
+    uint32_t pump_manual_start_tick;
+} system_ctrl_t;
+#define MANUAL_TIMEOUT_MS (1 * 15 * 1000) // 10 分钟
+typedef enum {
+    DEVICE_FAN = 0,
+    DEVICE_PUMP,
+    DEVICE_LED
+} device_type_t;
 #endif

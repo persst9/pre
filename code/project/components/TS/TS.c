@@ -16,7 +16,7 @@
 static const char *TAG = "TS APP";
 static QueueHandle_t adc_queue = NULL;
 static adc_continuous_handle_t s_adc_handle = NULL; // ADC 句柄
-
+//GPIO5
 static volatile uint16_t adc_value = 0;
 static volatile uint16_t adc_filtered = 0;
 static float ema_value = 0.0f;
@@ -105,14 +105,36 @@ uint16_t adc_continuous_read_data(void)
 {
     return adc_filtered;;
 }
+float convert_to(uint16_t input_value)
+{
+    // 1. 边界值校验（防止输入超出合理范围）
+    if (input_value < 0)
+    {
+        // printf("错误：输入值超出范围（0~%d）\n", PEAK_VALUE);
+        return -1.0f; // 返回异常值
+    }
 
+    // 2. 核心转换计算（反向线性映射）
+    float percentage = 100.0f * (1.0f - (float)input_value / 1995);
+
+    // 3. 精度处理（保留2位小数，可选）
+    percentage = (float)((int)(percentage * 100 + 0.5)) / 100;
+    if(input_value > 1995) {
+        percentage = 0.0f;
+    }
+    return percentage;
+}
 void ts_main(void)
 {
     adc_ts_init();
+    float percentage = 0.0f;
+    uint16_t ts_data = 0;
     while (1)
     {
-        uint16_t ts_data = adc_continuous_read_data();
+        ts_data = adc_continuous_read_data();
         //延时
+       percentage = convert_to(ts_data);
+        ESP_LOGI(TAG, "TS percentage: %f", percentage);
         ESP_LOGI(TAG, "TS value: %u", ts_data);
         vTaskDelay(3000 / portTICK_PERIOD_MS);
     }

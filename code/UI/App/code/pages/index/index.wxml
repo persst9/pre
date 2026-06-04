@@ -1,4 +1,4 @@
-<navigation-bar title="智慧农场监测系统" back="{{false}}" color="black" background="#FFF"></navigation-bar>
+<navigation-bar title="智能农业系统" back="{{false}}" color="black" background="#FFF"></navigation-bar>
 <view class="container">
   <view class="header">
     <text class="farm-title">🌱 智慧农场</text>
@@ -32,16 +32,16 @@
         <text class="threshold-tag">下限: {{nodes[currentNodeIndex].threshold.soil}}</text>
       </view>
 
-      <view class="sensor-item {{nodes[currentNodeIndex].light > nodes[currentNodeIndex].threshold.light ? 'alarm' : ''}}">
-        <text class="label">光照强度 {{nodes[currentNodeIndex].light > nodes[currentNodeIndex].threshold.light ? '⚠️' : ''}}</text>
+      <view class="sensor-item {{nodes[currentNodeIndex].light < nodes[currentNodeIndex].threshold.light ? 'alarm' : ''}}">
+        <text class="label">光照强度 {{nodes[currentNodeIndex].light < nodes[currentNodeIndex].threshold.light ? '⚠️' : ''}}</text>
         <text class="value">{{nodes[currentNodeIndex].light}}</text>
-        <text class="threshold-tag">上限: {{nodes[currentNodeIndex].threshold.light}}</text>
+        <text class="threshold-tag">下限: {{nodes[currentNodeIndex].threshold.light}}</text>
       </view>
 
-      <view class="sensor-item {{nodes[currentNodeIndex].hum > nodes[currentNodeIndex].threshold.hum ? 'alarm' : ''}}">
-        <text class="label">空气湿度 {{nodes[currentNodeIndex].hum > nodes[currentNodeIndex].threshold.hum ? '⚠️' : ''}}</text>
+      <view class="sensor-item {{nodes[currentNodeIndex].hum < nodes[currentNodeIndex].threshold.hum ? 'alarm' : ''}}">
+        <text class="label">空气湿度 {{nodes[currentNodeIndex].hum < nodes[currentNodeIndex].threshold.hum ? '⚠️' : ''}}</text>
         <text class="value">{{nodes[currentNodeIndex].hum}}%</text>
-        <text class="threshold-tag">上限: {{nodes[currentNodeIndex].threshold.hum}}</text>
+        <text class="threshold-tag">下限: {{nodes[currentNodeIndex].threshold.hum}}</text>
       </view>
     </view>
   </view>

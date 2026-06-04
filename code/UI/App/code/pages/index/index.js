@@ -16,7 +16,7 @@ Page({
         id: 1, // 建议用 ID 作为 MQTT 的 Topic 标识
         name: "1号蔬菜棚", 
         light: 0, temp: 0, hum: 0, soil: 0, fan: false, pump: false,LED:false,
-        threshold: { temp: 30, soil: 20, light: 15000, hum: 80 } 
+        threshold: { temp: 30, soil: 20, light: 50, hum: 30 } 
       }
     ],
     // MQTT 配置
@@ -44,7 +44,7 @@ getNextNodeId(nodes) {
     id++;
   }
 
-  return String(id);
+  return id;
 },
  // 连接 MQTT
  connectMqtt() {
@@ -112,7 +112,7 @@ handleMqttMessage(topic, data) {
       [`${base}.light`]: data.light ?? nodes[index].light,
       [`${base}.fan`]: data.fan === 1,
       [`${base}.pump`]: data.pump === 1,
-      [`${base}.LED`]: data.LED === 1,
+      [`${base}.LED`]: data.led === 1,
       lastUpdateTime: timeStr
     });
   } else {
@@ -222,8 +222,8 @@ setThreshold() {
   const index = this.data.currentNodeIndex;
   const node = this.data.nodes[index];
 
-  const items = ['温度上限', '土壤湿度下限', '光照上限', '环境湿度上限'];
-  const keys = ['temp', 'soil', 'light', 'hum'];
+  const items = ['温度上限', '土壤湿度下限', '光照下限', '环境湿度下限'];
+  const keys = ['temp', 'soil', 'light', 'humi'];
 
   wx.showActionSheet({
     itemList: items,
@@ -270,7 +270,7 @@ setThreshold() {
             if (this.data.client && this.data.client.connected) {
 
               const payload = JSON.stringify({
-                type: "threshold",
+                action: "threshold",
                 id: node.id,
                 key: selectedKey,
                 value: newVal
@@ -337,7 +337,7 @@ setThreshold() {
             soil: 0,
             fan: false,
             pump: false,
-            threshold: { temp: 30, soil: 20, light: 15000, hum: 80 }
+            threshold: { temp: 30, soil: 20, light: 50, hum: 30 }
           };
   
           newNodes.push(newNode);
@@ -414,7 +414,7 @@ setThreshold() {
           if (this.data.client && this.data.client.connected) {
   
             const payload = JSON.stringify({
-              action: "delete",
+              action: "deleteNode",
               nodeId: removedNode.id
             });
   
